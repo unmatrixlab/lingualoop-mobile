@@ -331,6 +331,6 @@
   els.importManualTransfer.addEventListener('click', importManualTransfer);
   (async () => {
     await loadLibrary(); await importPackFromHash(); render(); showView('today');
-    if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => registration.update()).catch(() => {}));
   })();
 })();
