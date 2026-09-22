@@ -85,9 +85,13 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .mode-card em { position: absolute; right: 15px; top: 16px; font-style: normal; color: var(--muted); font-size: 11px; }
 .project-heading { margin-top: 30px; }
 .study-summary, .study-list article { border: 1px solid var(--line); background: var(--panel); border-radius: 19px; padding: 14px; display: flex; align-items: center; gap: 12px; }
-.study-summary > div:nth-child(2), .study-list article > div:nth-child(2) { min-width: 0; display: grid; gap: 4px; flex: 1; }
+.study-summary > div:nth-child(2), .study-list-copy { min-width: 0; display: grid; gap: 4px; flex: 1; }
 .study-summary small, .study-list small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .study-swatch { width: 44px; height: 44px; flex: none; border-radius: 14px; background: linear-gradient(135deg, var(--blue), var(--violet)); }
+.study-summary.interactive { cursor: pointer; transition: border-color .16s ease, transform .16s ease, background .16s ease; }
+.study-summary.interactive:hover { border-color: rgba(115,224,197,.34); background: var(--panel-2); }
+.study-summary.interactive:active { transform: scale(.992); }
+.study-summary > span:last-child { color: var(--mint); font-size: 11px; font-weight: 900; white-space: nowrap; }
 
 .view-header { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; margin-bottom: 18px; }
 .view-header h1 { margin: 4px 0 0; font-size: 25px; }
@@ -128,7 +132,18 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .full-width { width: 100%; }
 
 .study-list { display: grid; gap: 10px; margin-bottom: 16px; }
-.study-list article button { border: 0; background: transparent; padding: 8px; color: var(--muted); }
+.study-list article { padding: 7px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; transition: border-color .18s ease, background .18s ease; }
+.study-list article.active { border-color: rgba(189,255,63,.42); background: linear-gradient(110deg, rgba(189,255,63,.07), transparent 60%), var(--panel); }
+.study-list article.confirming-delete { border-color: rgba(255,131,127,.48); }
+.study-select-button { min-width: 0; min-height: 62px; border: 0; border-radius: 14px; background: transparent; color: inherit; padding: 7px; display: flex; align-items: center; gap: 12px; text-align: left; }
+.study-select-button:hover { background: rgba(255,255,255,.025); }
+.study-active-state { flex: none; padding: 6px 8px; border-radius: 8px; color: var(--muted); background: rgba(255,255,255,.035); font-size: 9px; font-weight: 900; letter-spacing: .1em; }
+.study-list article.active .study-active-state { color: var(--lime); background: rgba(189,255,63,.09); }
+.study-delete-button { width: 48px; min-height: 62px; border: 0; border-radius: 14px; background: transparent; color: #74877d; display: grid; place-content: center; gap: 2px; padding: 6px; }
+.study-delete-button svg { width: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.study-delete-button span { min-height: 10px; font-size: 8px; font-weight: 900; letter-spacing: .06em; }
+.study-delete-button:hover { color: var(--coral); background: rgba(255,131,127,.07); }
+.study-list article.confirming-delete .study-delete-button { color: var(--coral); background: rgba(255,131,127,.12); }
 .study-list .empty-library { display: block; text-align: center; padding: 45px 22px; color: var(--muted); }
 .study-list .empty-library strong { color: var(--text); display: block; margin-bottom: 7px; }
 
