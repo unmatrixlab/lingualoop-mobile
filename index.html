@@ -9,7 +9,7 @@
   <title>LinguaLoop Mobile</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <div class="app-shell">
@@ -128,18 +128,34 @@
       <section class="view" data-view="connect" aria-labelledby="connectTitle">
         <div class="eyebrow-row"><span class="eyebrow">PRIVATE TRANSFER</span><span>NO CLOUD DATA</span></div>
         <h1 id="connectTitle">Connect LinguaLoop</h1>
-        <p class="page-intro">Send a reduced study pack directly from LinguaLoop 3. Your personal vocabulary is never stored on this website.</p>
+        <p class="page-intro">Move a reduced study pack into this installed app. Your personal vocabulary is never stored on this website.</p>
         <div class="connect-visual" aria-hidden="true">
           <div class="device desktop"><span></span><span></span><span></span></div>
           <div class="transfer-line"><i></i><b>•••</b></div>
           <div class="device phone"><span></span><span></span><span></span></div>
         </div>
+        <section class="transfer-import-card" aria-labelledby="transferImportTitle">
+          <div class="transfer-import-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8 7V5a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v2M6 6h12v16H6zM9 13l3 3 3-3M12 9v7"/></svg>
+          </div>
+          <div class="transfer-import-copy">
+            <span>STUDY COPIED IN SAFARI?</span>
+            <strong id="transferImportTitle">Bring it into this app</strong>
+            <p>Return here after scanning the computer QR and copying the study.</p>
+          </div>
+          <button class="primary-action transfer-paste-button" id="pasteTransferButton" type="button">Paste study</button>
+          <div class="manual-transfer-panel" id="manualTransferPanel" hidden>
+            <label for="manualTransferInput">If automatic paste is unavailable, tap below and use <b>Paste</b>.</label>
+            <textarea id="manualTransferInput" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the LinguaLoop transfer here"></textarea>
+            <button class="secondary-action" id="importManualTransferButton" type="button">Import pasted study</button>
+          </div>
+        </section>
         <ol class="connect-steps">
           <li><span>1</span><div><strong>Open LinguaLoop 3</strong><small>Choose <b>Send to phone</b> from Studies.</small></div></li>
-          <li><span>2</span><div><strong>Scan its QR code</strong><small>Your phone opens this app securely.</small></div></li>
-          <li><span>3</span><div><strong>Start practicing</strong><small>The study is stored here automatically for offline use.</small></div></li>
+          <li><span>2</span><div><strong>Scan and copy</strong><small>Use the iPhone camera, then tap <b>Copy study</b> in Safari.</small></div></li>
+          <li><span>3</span><div><strong>Paste it here</strong><small>Open this Home Screen app and tap <b>Paste study</b>. It stays available offline.</small></div></li>
         </ol>
-        <div class="connection-status"><i></i><div><strong>Ready to receive</strong><small>Waiting for a LinguaLoop study pack</small></div></div>
+        <div class="connection-status"><i></i><div><strong>Ready to import</strong><small>Safari and this installed app keep separate private storage</small></div></div>
       </section>
     </main>
 
@@ -152,6 +168,6 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
