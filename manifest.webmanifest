@@ -1,0 +1,14 @@
+{
+  "name": "LinguaLoop Mobile",
+  "short_name": "LinguaLoop",
+  "description": "Focused, offline vocabulary practice for LinguaLoop.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07100d",
+  "theme_color": "#08110e",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
