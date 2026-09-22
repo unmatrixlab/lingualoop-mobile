@@ -10,7 +10,7 @@
   const state = {
     library: { version: 1, activeStudyId: '', studies: [] },
     view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
-    pendingDeleteStudyId: '', pendingDeleteTimer: null
+    pendingDeleteStudyId: '', pendingDeleteTimer: null, fullVideoStudyId: ''
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -22,8 +22,25 @@
     startReview: $('#startReviewButton'), toast: $('#toast'), pasteTransfer: $('#pasteTransferButton'), manualTransferPanel: $('#manualTransferPanel'), manualTransferInput: $('#manualTransferInput'), importManualTransfer: $('#importManualTransferButton'),
     practiceModeLabel: $('#practiceModeLabel'), practiceProgress: $('#practiceProgress'), sessionTrackFill: $('#sessionTrackFill'), practiceStage: $('#practiceStage'), practiceEmpty: $('#practiceEmpty'),
     promptDirection: $('#promptDirection'), promptText: $('#promptText'), promptContext: $('#promptContext'), answerArea: $('#answerArea'), answerText: $('#answerText'), answerContext: $('#answerContext'),
-    reveal: $('#revealButton'), ratingRow: $('#ratingRow'), speak: $('#speakButton'), writeForm: $('#writeForm'), writeAnswer: $('#writeAnswer'), writeFeedback: $('#writeFeedback')
+    reveal: $('#revealButton'), ratingRow: $('#ratingRow'), speak: $('#speakButton'), answerSpeak: $('#answerSpeakButton'), writeForm: $('#writeForm'), writeAnswer: $('#writeAnswer'), writeFeedback: $('#writeFeedback'),
+    clipButton: $('#clipButton'), clipPanel: $('#clipPanel'), clipFrame: $('#clipFrame'), clipTitle: $('#clipTitle'), closeClip: $('#closeClipButton'),
+    studyVideoReady: $('#studyVideoReady'), studyVideoEmpty: $('#studyVideoEmpty'), studyVideoTitle: $('#studyVideoTitle'), studyVideoMeta: $('#studyVideoMeta'), studyVideoFrame: $('#studyVideoFrame'), restartStudyVideo: $('#restartStudyVideoButton')
   };
+
+  function normalizeYouTubeMedia(value) {
+    const id = String(value?.id || '').trim();
+    if (value?.type !== 'youtube' || !/^[a-zA-Z0-9_-]{6,20}$/.test(id)) return null;
+    return { type: 'youtube', id, name: String(value.name || 'YouTube video').trim().slice(0, 160) };
+  }
+
+  function normalizeClip(value) {
+    const start = Number(value?.start);
+    const end = Number(value?.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+    const safeStart = Math.min(86399.95, Math.max(0, start));
+    const safeEnd = Math.min(86400, Math.max(safeStart + .05, end));
+    return safeEnd > safeStart ? { start: safeStart, end: safeEnd } : null;
+  }
 
   function openDb() {
     return new Promise((resolve, reject) => {
@@ -70,9 +87,11 @@
       changed = true;
     }
     state.library.studies.forEach(study => {
+      study.media = normalizeYouTubeMedia(study.media);
       study.cards = Array.isArray(study.cards) ? study.cards : [];
       study.cards.forEach((card, index) => Object.assign(card, {
         id: card.id || `${study.id}-${index}`, english: String(card.english || ''), spanish: String(card.spanish || ''), context: String(card.context || ''),
+        clip: normalizeClip(card.clip),
         level: Number(card.level) || 0, dueAt: Number(card.dueAt) || 0, reviews: Number(card.reviews) || 0, correct: Number(card.correct) || 0
       }));
     });
@@ -86,9 +105,13 @@
 
   function showView(view) {
     if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
+    if (state.view === 'practice' && view !== 'practice') closeCardClip();
+    if (state.view === 'video' && view !== 'video') stopStudyVideo();
+    stopSpeech();
     state.view = view;
     $$('.view').forEach(section => section.classList.toggle('active', section.dataset.view === view));
     $$('.bottom-nav [data-view-target]').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === view));
+    if (view === 'video') renderStudyVideo();
     scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -172,6 +195,8 @@
   }
 
   function startPractice(mode = 'cards') {
+    closeCardClip();
+    stopSpeech();
     state.practiceMode = mode;
     const study = activeStudy();
     const due = dueCards(study);
@@ -195,7 +220,9 @@
     els.practiceStage.hidden = !card;
     els.practiceProgress.textContent = `${Math.min(state.index + 1, total)} / ${total}`;
     els.sessionTrackFill.style.width = total ? `${state.index / total * 100}%` : '100%';
-    if (!card) return;
+    if (!card) { closeCardClip(); return; }
+    closeCardClip();
+    stopSpeech();
     state.revealed = false;
     els.promptDirection.textContent = 'ENGLISH → SPANISH';
     els.promptText.textContent = card.english;
@@ -209,6 +236,10 @@
     els.writeAnswer.value = '';
     els.writeFeedback.textContent = '';
     els.writeFeedback.className = '';
+    const clip = currentCardClip();
+    els.clipButton.hidden = !clip;
+    els.clipButton.setAttribute('aria-pressed', 'false');
+    if (clip) els.clipTitle.textContent = `${activeStudy()?.name || 'Current study'} · ${formatClipTime(clip.start)}–${formatClipTime(clip.end)}`;
     if (state.practiceMode === 'write') setTimeout(() => els.writeAnswer.focus(), 100);
   }
 
@@ -238,9 +269,94 @@
     els.writeFeedback.className = correct ? 'correct' : 'incorrect'; revealAnswer();
   }
 
+  function stopSpeech() {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    $$('.practice-tool-button.speaking').forEach(button => { button.classList.remove('speaking'); button.setAttribute('aria-pressed', 'false'); });
+  }
+
+  function speakText(text, language, button) {
+    if (!text || !('speechSynthesis' in window)) { showToast('Speech is unavailable on this device'); return; }
+    if (button?.classList.contains('speaking')) { stopSpeech(); return; }
+    stopSpeech();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language;
+    utterance.rate = .9;
+    const languagePrefix = language.toLowerCase().split('-')[0];
+    const matchingVoice = speechSynthesis.getVoices().find(voice => voice.lang.toLowerCase().startsWith(languagePrefix));
+    if (matchingVoice) utterance.voice = matchingVoice;
+    const finish = () => { button?.classList.remove('speaking'); button?.setAttribute('aria-pressed', 'false'); };
+    utterance.onstart = () => { button?.classList.add('speaking'); button?.setAttribute('aria-pressed', 'true'); };
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    speechSynthesis.speak(utterance);
+  }
+
   function speakCurrent() {
-    const card = currentCard(); if (!card || !('speechSynthesis' in window)) return;
-    speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(card.english); utterance.lang = 'en-US'; utterance.rate = .9; speechSynthesis.speak(utterance);
+    const card = currentCard();
+    if (card) speakText(card.english, 'en-US', els.speak);
+  }
+
+  function speakCurrentAnswer() {
+    const card = currentCard();
+    if (card) speakText(card.spanish, 'es-US', els.answerSpeak);
+  }
+
+  function currentCardClip() {
+    const study = activeStudy();
+    const clip = normalizeClip(currentCard()?.clip);
+    return study?.media?.type === 'youtube' && clip ? clip : null;
+  }
+
+  function formatClipTime(value) {
+    const seconds = Math.max(0, Math.floor(Number(value) || 0));
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+
+  function closeCardClip() {
+    if (!els.clipPanel) return;
+    els.clipFrame.removeAttribute('src');
+    els.clipPanel.hidden = true;
+    els.clipButton?.setAttribute('aria-pressed', 'false');
+  }
+
+  function toggleCardClip() {
+    if (!els.clipPanel.hidden) { closeCardClip(); return; }
+    const study = activeStudy();
+    const clip = currentCardClip();
+    if (!study?.media || !clip) return;
+    const start = Math.max(0, Math.floor(clip.start));
+    const end = Math.max(start + 1, Math.ceil(clip.end));
+    els.clipFrame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(study.media.id)}?autoplay=1&start=${start}&end=${end}&controls=1&playsinline=1&rel=0&cc_load_policy=0&iv_load_policy=3`;
+    els.clipPanel.hidden = false;
+    els.clipButton.setAttribute('aria-pressed', 'true');
+  }
+
+  function stopStudyVideo() {
+    if (!els.studyVideoFrame) return;
+    els.studyVideoFrame.removeAttribute('src');
+    state.fullVideoStudyId = '';
+  }
+
+  function loadStudyVideo(restart = false) {
+    const study = activeStudy();
+    const media = normalizeYouTubeMedia(study?.media);
+    if (!media) return;
+    if (!restart && state.fullVideoStudyId === study.id && els.studyVideoFrame.getAttribute('src')) return;
+    els.studyVideoFrame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(media.id)}?controls=1&playsinline=1&rel=0&cc_load_policy=0&iv_load_policy=3`;
+    state.fullVideoStudyId = study.id;
+  }
+
+  function renderStudyVideo() {
+    if (!els.studyVideoReady) return;
+    const study = activeStudy();
+    const media = normalizeYouTubeMedia(study?.media);
+    els.studyVideoReady.hidden = !media;
+    els.studyVideoEmpty.hidden = Boolean(media);
+    if (!media) { stopStudyVideo(); return; }
+    els.studyVideoTitle.textContent = study.name || 'Study video';
+    els.studyVideoMeta.textContent = `${media.name || 'YouTube video'} · ${study.cards.length} vocabulary cards`;
+    loadStudyVideo();
   }
 
   function base64UrlBytes(value) {
@@ -374,6 +490,10 @@
   els.startReview.addEventListener('click', () => { startPractice('cards'); showView('practice'); });
   els.reveal.addEventListener('click', revealAnswer);
   els.speak.addEventListener('click', speakCurrent);
+  els.answerSpeak.addEventListener('click', speakCurrentAnswer);
+  els.clipButton.addEventListener('click', toggleCardClip);
+  els.closeClip.addEventListener('click', closeCardClip);
+  els.restartStudyVideo.addEventListener('click', () => loadStudyVideo(true));
   els.writeForm.addEventListener('submit', checkWrittenAnswer);
   els.pasteTransfer.addEventListener('click', pasteTransferFromClipboard);
   els.importManualTransfer.addEventListener('click', importManualTransfer);
