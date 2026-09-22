@@ -18,7 +18,7 @@
     dueCount: $('#dueCount'), todayDate: $('#todayDate'), todayMessage: $('#todayMessage'), retentionValue: $('#retentionValue'), progressOrbit: $('#progressOrbit'),
     statDue: $('#statDue'), statLearning: $('#statLearning'), statStrong: $('#statStrong'), cardsCount: $('#cardsCount'), writeCount: $('#writeCount'),
     activeStudyTitle: $('#activeStudyTitle'), activeStudySummary: $('#activeStudySummary'), studyCount: $('#studyCount'), studyList: $('#studyList'),
-    startReview: $('#startReviewButton'), toast: $('#toast'),
+    startReview: $('#startReviewButton'), toast: $('#toast'), pasteTransfer: $('#pasteTransferButton'), manualTransferPanel: $('#manualTransferPanel'), manualTransferInput: $('#manualTransferInput'), importManualTransfer: $('#importManualTransferButton'),
     practiceModeLabel: $('#practiceModeLabel'), practiceProgress: $('#practiceProgress'), sessionTrackFill: $('#sessionTrackFill'), practiceStage: $('#practiceStage'), practiceEmpty: $('#practiceEmpty'),
     promptDirection: $('#promptDirection'), promptText: $('#promptText'), promptContext: $('#promptContext'), answerArea: $('#answerArea'), answerText: $('#answerText'), answerContext: $('#answerContext'),
     reveal: $('#revealButton'), ratingRow: $('#ratingRow'), speak: $('#speakButton'), writeForm: $('#writeForm'), writeAnswer: $('#writeAnswer'), writeFeedback: $('#writeFeedback')
@@ -204,17 +204,28 @@
     return Uint8Array.from(binary, character => character.charCodeAt(0));
   }
 
-  async function decodePackHash() {
-    if (location.hash.startsWith('#packz=')) {
+  function normalizedTransferFragment(value) {
+    let text = String(value || '').trim();
+    if (text.startsWith('LINGUALOOP:')) text = text.slice(11).trim();
+    const hashIndex = text.indexOf('#pack');
+    if (hashIndex >= 0) text = text.slice(hashIndex);
+    if (text.startsWith('packz=')) text = `#${text}`;
+    if (text.startsWith('pack=')) text = `#${text}`;
+    return text;
+  }
+
+  async function decodePackValue(value) {
+    const fragment = normalizedTransferFragment(value);
+    if (fragment.startsWith('#packz=')) {
       if (typeof DecompressionStream !== 'function') throw new Error('Compressed study packs are not supported by this browser');
-      const bytes = base64UrlBytes(location.hash.slice(7));
+      const bytes = base64UrlBytes(fragment.slice(7));
       const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
       return JSON.parse(await new Response(stream).text());
     }
-    if (location.hash.startsWith('#pack=')) {
-      return JSON.parse(new TextDecoder().decode(base64UrlBytes(location.hash.slice(6))));
+    if (fragment.startsWith('#pack=')) {
+      return JSON.parse(new TextDecoder().decode(base64UrlBytes(fragment.slice(6))));
     }
-    return null;
+    throw new Error('Not a LinguaLoop transfer');
   }
 
   function mergeIncomingStudy(incoming) {
@@ -236,19 +247,70 @@
     return incoming;
   }
 
+  async function importPackValue(value) {
+    const pack = await decodePackValue(value);
+    const studies = Array.isArray(pack.studies) ? pack.studies : pack.study ? [pack.study] : [];
+    if (!studies.length) throw new Error('Empty pack');
+    studies.forEach(rawIncoming => {
+      const incoming = mergeIncomingStudy(rawIncoming);
+      const index = state.library.studies.findIndex(study => study.id === incoming.id);
+      if (index >= 0) state.library.studies[index] = incoming; else state.library.studies.push(incoming);
+    });
+    state.library.activeStudyId = studies[0].id;
+    normalizeLibrary();
+    await saveLibrary();
+    render();
+    showView('today');
+    showToast(studies.length === 1 ? `${studies[0].name} received` : `${studies.length} studies received`);
+  }
+
   async function importPackFromHash() {
     if (!location.hash.startsWith('#pack=') && !location.hash.startsWith('#packz=')) return;
     try {
-      const pack = await decodePackHash();
-      const studies = Array.isArray(pack.studies) ? pack.studies : pack.study ? [pack.study] : [];
-      if (!studies.length) throw new Error('Empty pack');
-      studies.forEach(rawIncoming => {
-        const incoming = mergeIncomingStudy(rawIncoming);
-        const index = state.library.studies.findIndex(study => study.id === incoming.id);
-        if (index >= 0) state.library.studies[index] = incoming; else state.library.studies.push(incoming);
-      });
-      state.library.activeStudyId = studies[0].id; normalizeLibrary(); await saveLibrary(); history.replaceState(null, '', location.pathname + location.search); showToast(`${studies[0].name} received`);
-    } catch { history.replaceState(null, '', location.pathname + location.search); showToast('This study pack could not be read'); }
+      await importPackValue(location.hash);
+    } catch {
+      showToast('This study pack could not be read');
+    } finally {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+
+  function revealManualTransfer() {
+    els.manualTransferPanel.hidden = false;
+    requestAnimationFrame(() => els.manualTransferInput.focus());
+  }
+
+  async function pasteTransferFromClipboard() {
+    const original = els.pasteTransfer.textContent;
+    els.pasteTransfer.disabled = true;
+    els.pasteTransfer.textContent = 'Reading…';
+    try {
+      if (!navigator.clipboard?.readText) throw new Error('Clipboard reading unavailable');
+      const value = await Promise.race([
+        navigator.clipboard.readText(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard reading timed out')), 3000))
+      ]);
+      await importPackValue(value);
+      els.manualTransferPanel.hidden = true;
+      els.manualTransferInput.value = '';
+    } catch {
+      revealManualTransfer();
+      showToast('Paste the copied transfer below');
+    } finally {
+      els.pasteTransfer.disabled = false;
+      els.pasteTransfer.textContent = original;
+    }
+  }
+
+  async function importManualTransfer() {
+    try {
+      await importPackValue(els.manualTransferInput.value);
+      els.manualTransferPanel.hidden = true;
+      els.manualTransferInput.value = '';
+    } catch {
+      showToast('This is not a valid LinguaLoop transfer');
+      els.manualTransferInput.focus();
+    }
   }
 
   function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char])); }
@@ -265,6 +327,8 @@
   els.reveal.addEventListener('click', revealAnswer);
   els.speak.addEventListener('click', speakCurrent);
   els.writeForm.addEventListener('submit', checkWrittenAnswer);
+  els.pasteTransfer.addEventListener('click', pasteTransferFromClipboard);
+  els.importManualTransfer.addEventListener('click', importManualTransfer);
   (async () => {
     await loadLibrary(); await importPackFromHash(); render(); showView('today');
     if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
