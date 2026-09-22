@@ -13,12 +13,14 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Written recall
 - Multiple studies stored locally
 - Offline PWA support
-- Private same-Wi-Fi QR transfer from LinguaLoop 3
+- Private same-Wi-Fi QR and clipboard transfer from LinguaLoop 3
 - Compressed `#packz=` payload import with legacy `#pack=` compatibility
 
 ## Study pack format
 
-LinguaLoop 3 creates a short-lived local QR route. The phone receives the selected studies directly from the computer and opens this PWA with a DEFLATE-compressed Base64URL payload in the URL fragment. GitHub Pages never receives the fragment or the vocabulary.
+LinguaLoop 3 creates a short-lived local QR route. Scanning it in the iPhone Camera opens a local handoff page in Safari. The user copies the compressed transfer, returns to the installed Home Screen app and taps **Paste study**. This explicit handoff is required because iOS keeps Safari storage separate from an installed Home Screen web app. GitHub Pages never receives the vocabulary; the transfer stays between the computer, clipboard and installed app.
+
+Direct `#packz=` URL import remains supported for browsers and platforms that keep the web app in the same storage context.
 
 The decoded study pack uses this structure:
 
