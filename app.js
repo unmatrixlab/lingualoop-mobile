@@ -6,24 +6,6 @@
   const STORE_NAME = 'state';
   const STATE_KEY = 'library';
   const DAY = 86400000;
-  const demoStudy = {
-    id: 'demo-coffee-shop',
-    name: 'Coffee shop conversation',
-    color: '#76a8ff',
-    source: 'LinguaLoop demo',
-    importedAt: Date.now(),
-    cards: [
-      ['Good morning! What can I get for you?', '¿Qué te puedo servir?', 'A natural greeting from a barista.'],
-      ["I'd like a cappuccino, please.", 'Quisiera un capuchino, por favor.', 'A polite way to order.'],
-      ['Would you like that hot or iced?', '¿Lo quieres caliente o con hielo?', 'A common follow-up question.'],
-      ['Make it a large.', 'Que sea grande.', 'Use it to choose a larger size.'],
-      ['Anything else for you today?', '¿Algo más para ti hoy?', 'A final question before paying.'],
-      ["That's all. How much is it?", 'Eso es todo. ¿Cuánto cuesta?', 'Finish the order and ask the price.']
-    ].map((entry, index) => ({
-      id: `demo-${index + 1}`, english: entry[0], spanish: entry[1], context: entry[2],
-      level: 0, dueAt: 0, reviews: 0, correct: 0, lastRating: ''
-    }))
-  };
 
   const state = {
     library: { version: 1, activeStudyId: '', studies: [] },
@@ -36,7 +18,7 @@
     dueCount: $('#dueCount'), todayDate: $('#todayDate'), todayMessage: $('#todayMessage'), retentionValue: $('#retentionValue'), progressOrbit: $('#progressOrbit'),
     statDue: $('#statDue'), statLearning: $('#statLearning'), statStrong: $('#statStrong'), cardsCount: $('#cardsCount'), writeCount: $('#writeCount'),
     activeStudyTitle: $('#activeStudyTitle'), activeStudySummary: $('#activeStudySummary'), studyCount: $('#studyCount'), studyList: $('#studyList'),
-    startReview: $('#startReviewButton'), loadDemo: $('#loadDemoButton'), toast: $('#toast'),
+    startReview: $('#startReviewButton'), toast: $('#toast'),
     practiceModeLabel: $('#practiceModeLabel'), practiceProgress: $('#practiceProgress'), sessionTrackFill: $('#sessionTrackFill'), practiceStage: $('#practiceStage'), practiceEmpty: $('#practiceEmpty'),
     promptDirection: $('#promptDirection'), promptText: $('#promptText'), promptContext: $('#promptContext'), answerArea: $('#answerArea'), answerText: $('#answerText'), answerContext: $('#answerContext'),
     reveal: $('#revealButton'), ratingRow: $('#ratingRow'), speak: $('#speakButton'), writeForm: $('#writeForm'), writeAnswer: $('#writeAnswer'), writeFeedback: $('#writeFeedback')
@@ -63,7 +45,8 @@
     } catch {
       try { state.library = JSON.parse(localStorage.getItem(DB_NAME)) || state.library; } catch { /* keep empty */ }
     }
-    normalizeLibrary();
+    const migrated = normalizeLibrary();
+    if (migrated) await saveLibrary();
   }
 
   async function saveLibrary() {
@@ -78,7 +61,13 @@
   }
 
   function normalizeLibrary() {
+    let changed = false;
     if (!state.library || !Array.isArray(state.library.studies)) state.library = { version: 1, activeStudyId: '', studies: [] };
+    const withoutDemo = state.library.studies.filter(study => study?.id !== 'demo-coffee-shop');
+    if (withoutDemo.length !== state.library.studies.length) {
+      state.library.studies = withoutDemo;
+      changed = true;
+    }
     state.library.studies.forEach(study => {
       study.cards = Array.isArray(study.cards) ? study.cards : [];
       study.cards.forEach((card, index) => Object.assign(card, {
@@ -87,6 +76,7 @@
       }));
     });
     if (!state.library.studies.some(study => study.id === state.library.activeStudyId)) state.library.activeStudyId = state.library.studies[0]?.id || '';
+    return changed;
   }
 
   const activeStudy = () => state.library.studies.find(study => study.id === state.library.activeStudyId) || null;
@@ -111,7 +101,7 @@
     const retention = totalReviews ? Math.round(correct / totalReviews * 100) : 0;
     els.todayDate.textContent = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date()).toUpperCase();
     els.dueCount.textContent = due.length;
-    els.todayMessage.textContent = due.length ? 'A short session keeps every word within reach.' : study ? 'You are caught up. Practice anything when you feel ready.' : 'Connect a study or explore the demo to begin.';
+    els.todayMessage.textContent = due.length ? 'A short session keeps every word within reach.' : study ? 'You are caught up. Practice anything when you feel ready.' : 'Connect a study from LinguaLoop 3 to begin.';
     els.retentionValue.textContent = `${retention}%`;
     els.progressOrbit.style.setProperty('--progress', `${retention}%`);
     els.statDue.textContent = due.length;
@@ -132,7 +122,7 @@
       <div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div>
       <div><strong>${escapeHtml(study.name)}</strong><small>${study.cards.length} words · ${dueCards(study).length} due</small></div>
       <button type="button" data-study-open="${escapeHtml(study.id)}" aria-label="Use ${escapeHtml(study.name)}">${study.id === state.library.activeStudyId ? '✓' : '→'}</button>
-    </article>`).join('') : '<article class="empty-library"><strong>Your library is empty</strong>Connect LinguaLoop 3 or load the demo study.</article>';
+    </article>`).join('') : '<article class="empty-library"><strong>Your library is empty</strong>Open Studies in LinguaLoop 3 and choose Send to phone.</article>';
   }
 
   function startPractice(mode = 'cards') {
@@ -207,21 +197,53 @@
     speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(card.english); utterance.lang = 'en-US'; utterance.rate = .9; speechSynthesis.speak(utterance);
   }
 
-  async function loadDemo() {
-    const existing = state.library.studies.find(study => study.id === demoStudy.id);
-    if (!existing) state.library.studies.push(structuredClone(demoStudy));
-    state.library.activeStudyId = demoStudy.id; await saveLibrary(); render(); showView('today'); showToast(existing ? 'Demo study selected' : 'Demo study added');
+  function base64UrlBytes(value) {
+    const encoded = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+    const binary = atob(padded);
+    return Uint8Array.from(binary, character => character.charCodeAt(0));
+  }
+
+  async function decodePackHash() {
+    if (location.hash.startsWith('#packz=')) {
+      if (typeof DecompressionStream !== 'function') throw new Error('Compressed study packs are not supported by this browser');
+      const bytes = base64UrlBytes(location.hash.slice(7));
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+      return JSON.parse(await new Response(stream).text());
+    }
+    if (location.hash.startsWith('#pack=')) {
+      return JSON.parse(new TextDecoder().decode(base64UrlBytes(location.hash.slice(6))));
+    }
+    return null;
+  }
+
+  function mergeIncomingStudy(incoming) {
+    const existing = state.library.studies.find(study => study.id === incoming.id);
+    if (!existing) return incoming;
+    const previousCards = new Map((existing.cards || []).map(card => [card.id, card]));
+    incoming.cards = incoming.cards.map(card => {
+      const previous = previousCards.get(card.id);
+      if (!previous || Number(previous.reviews) <= 0) return card;
+      return {
+        ...card,
+        level: Number(previous.level) || 0,
+        dueAt: Number(previous.dueAt) || 0,
+        reviews: Number(previous.reviews) || 0,
+        correct: Number(previous.correct) || 0,
+        lastRating: String(previous.lastRating || '')
+      };
+    });
+    return incoming;
   }
 
   async function importPackFromHash() {
-    if (!location.hash.startsWith('#pack=')) return;
+    if (!location.hash.startsWith('#pack=') && !location.hash.startsWith('#packz=')) return;
     try {
-      const encoded = location.hash.slice(6).replace(/-/g, '+').replace(/_/g, '/');
-      const json = decodeURIComponent(escape(atob(encoded)));
-      const pack = JSON.parse(json);
+      const pack = await decodePackHash();
       const studies = Array.isArray(pack.studies) ? pack.studies : pack.study ? [pack.study] : [];
       if (!studies.length) throw new Error('Empty pack');
-      studies.forEach(incoming => {
+      studies.forEach(rawIncoming => {
+        const incoming = mergeIncomingStudy(rawIncoming);
         const index = state.library.studies.findIndex(study => study.id === incoming.id);
         if (index >= 0) state.library.studies[index] = incoming; else state.library.studies.push(incoming);
       });
@@ -243,8 +265,6 @@
   els.reveal.addEventListener('click', revealAnswer);
   els.speak.addEventListener('click', speakCurrent);
   els.writeForm.addEventListener('submit', checkWrittenAnswer);
-  els.loadDemo.addEventListener('click', loadDemo);
-
   (async () => {
     await loadLibrary(); await importPackFromHash(); render(); showView('today');
     if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
