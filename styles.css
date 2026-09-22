@@ -99,7 +99,7 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .session-count { color: var(--muted); font-size: 12px; font-weight: 800; }
 .session-track { height: 3px; background: rgba(255,255,255,.07); border-radius: 3px; margin-bottom: 28px; overflow: hidden; }
 .session-track i { display: block; height: 100%; width: 0; background: var(--lime); transition: width .25s ease; }
-.practice-stage { min-height: calc(100svh - 250px); display: flex; flex-direction: column; }
+.practice-stage { display: flex; flex-direction: column; }
 .prompt-meta { display: flex; align-items: center; justify-content: space-between; color: var(--muted); margin: 0 4px 10px; }
 .speak-button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--mint); font-size: 20px; }
 .recall-card { min-height: 305px; border-radius: 28px; border: 1px solid rgba(118, 168, 255, .28); background: radial-gradient(circle at 75% 20%, rgba(118, 168, 255, .1), transparent 38%), var(--panel); padding: 26px 22px; display: flex; flex-direction: column; justify-content: center; }
@@ -110,8 +110,8 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .answer-area > span { color: var(--mint); font-size: 10px; font-weight: 900; letter-spacing: .16em; }
 .answer-area strong { font-size: 24px; color: var(--mint); }
 .answer-area p { color: var(--muted); margin: 0; line-height: 1.4; }
-.reveal-button { width: 100%; margin-top: auto; }
-.rating-row { margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.reveal-button { width: 100%; margin-top: 16px; }
+.rating-row { margin-top: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .rating-row button { min-height: 60px; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); display: grid; place-content: center; gap: 3px; }
 .rating-row button:nth-child(1) { color: var(--coral); }
 .rating-row button:nth-child(2) { color: var(--yellow); }
@@ -181,7 +181,7 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .bottom-nav button { min-height: 55px; border: 0; border-radius: 16px; background: transparent; color: #71837a; display: grid; place-content: center; gap: 3px; font-size: 10px; font-weight: 800; }
 .bottom-nav button.active { color: var(--lime); background: rgba(189,255,63,.08); }
 .bottom-nav svg { margin:auto; width: 21px; height: 21px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linejoin:round; }
-.toast { position: fixed; z-index: 40; left: 50%; bottom: 100px; transform: translate(-50%, 20px); max-width: calc(100% - 40px); padding: 12px 17px; border-radius: 14px; background: #edf9f2; color: #0b1712; font-size: 12px; font-weight: 800; opacity: 0; pointer-events: none; transition: .25s ease; }
+.toast { position: fixed; z-index: 40; left: 50%; bottom: calc(92px + var(--safe-bottom)); transform: translate(-50%, 20px); max-width: calc(100% - 40px); padding: 12px 17px; border-radius: 14px; background: #edf9f2; color: #0b1712; font-size: 12px; font-weight: 800; opacity: 0; pointer-events: none; transition: .25s ease; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (min-width: 620px) {
