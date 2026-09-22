@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#08110e">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A focused, offline vocabulary companion for LinguaLoop.">
+  <title>LinguaLoop Mobile</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40"><path d="M28 11a11 11 0 1 0 2.2 13.8"/><path d="m27 7 1 8-8-1"/><path d="M14 20h12M20 14v12"/></svg>
+      </div>
+      <div class="brand-copy">
+        <span>LINGUALOOP</span>
+        <strong>Mobile</strong>
+      </div>
+      <button class="connection-pill" id="connectionPill" type="button" data-view-target="connect" aria-label="Open connection status">
+        <i aria-hidden="true"></i><span>Local</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="view active" data-view="today" aria-labelledby="todayTitle">
+        <div class="eyebrow-row"><span class="eyebrow">DAILY PRACTICE</span><span id="todayDate"></span></div>
+        <section class="hero-card">
+          <div>
+            <p class="hero-kicker">READY TO REVIEW</p>
+            <h1 id="todayTitle"><span id="dueCount">0</span> words<br>for today</h1>
+            <p id="todayMessage">A short session keeps every word within reach.</p>
+          </div>
+          <div class="progress-orbit" id="progressOrbit" style="--progress:0%">
+            <div><strong id="retentionValue">0%</strong><span>retention</span></div>
+          </div>
+          <button class="primary-action" id="startReviewButton" type="button">
+            <span>Start review</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+        </section>
+
+        <div class="stat-grid" aria-label="Vocabulary summary">
+          <article><span class="stat-icon due">↻</span><strong id="statDue">0</strong><small>Due now</small></article>
+          <article><span class="stat-icon learning">◇</span><strong id="statLearning">0</strong><small>Learning</small></article>
+          <article><span class="stat-icon strong">✓</span><strong id="statStrong">0</strong><small>Strong</small></article>
+        </div>
+
+        <div class="section-heading">
+          <div><span class="eyebrow">QUICK PRACTICE</span><h2>Choose a mode</h2></div>
+        </div>
+        <div class="mode-grid">
+          <button class="mode-card" type="button" data-practice-mode="cards">
+            <span class="mode-icon cards-icon">▱</span>
+            <span><strong>Cards</strong><small>Recall, reveal and rate</small></span>
+            <em id="cardsCount">0</em>
+          </button>
+          <button class="mode-card" type="button" data-practice-mode="write">
+            <span class="mode-icon write-icon">Aa</span>
+            <span><strong>Write</strong><small>Type what you remember</small></span>
+            <em id="writeCount">0</em>
+          </button>
+        </div>
+
+        <div class="section-heading project-heading">
+          <div><span class="eyebrow">ACTIVE STUDY</span><h2 id="activeStudyTitle">No study yet</h2></div>
+          <button class="text-button" type="button" data-view-target="studies">All studies</button>
+        </div>
+        <article class="study-summary" id="activeStudySummary">
+          <div class="study-swatch"></div>
+          <div><strong>Connect LinguaLoop 3</strong><small>Your selected vocabulary will appear here.</small></div>
+          <span>→</span>
+        </article>
+      </section>
+
+      <section class="view" data-view="practice" aria-labelledby="practiceTitle">
+        <header class="view-header">
+          <button class="icon-button" type="button" data-view-target="today" aria-label="Return to Today">←</button>
+          <div><span class="eyebrow" id="practiceModeLabel">CARDS</span><h1 id="practiceTitle">Daily review</h1></div>
+          <span class="session-count" id="practiceProgress">0 / 0</span>
+        </header>
+        <div class="session-track"><i id="sessionTrackFill"></i></div>
+
+        <section class="practice-empty" id="practiceEmpty" hidden>
+          <span>✓</span><h2>All caught up</h2><p>There are no words due in this study.</p>
+          <button class="secondary-action" type="button" data-view-target="today">Back to Today</button>
+        </section>
+
+        <section class="practice-stage" id="practiceStage">
+          <div class="prompt-meta"><span id="promptDirection">ENGLISH → SPANISH</span><button class="speak-button" id="speakButton" type="button" aria-label="Pronounce the prompt">⌁</button></div>
+          <article class="recall-card" id="recallCard">
+            <span class="card-label">REMEMBER THIS</span>
+            <h2 id="promptText">Ready?</h2>
+            <p id="promptContext"></p>
+            <div class="answer-area" id="answerArea" hidden>
+              <span>ANSWER</span><strong id="answerText"></strong><p id="answerContext"></p>
+            </div>
+          </article>
+
+          <form class="write-form" id="writeForm" hidden>
+            <label for="writeAnswer">Your answer</label>
+            <div><input id="writeAnswer" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
+            <p id="writeFeedback" role="status"></p>
+          </form>
+
+          <button class="primary-action reveal-button" id="revealButton" type="button">Reveal answer</button>
+          <div class="rating-row" id="ratingRow" hidden>
+            <button type="button" data-rating="again"><span>Again</span><small>&lt; 1 min</small></button>
+            <button type="button" data-rating="hard"><span>Hard</span><small>1 day</small></button>
+            <button type="button" data-rating="good"><span>Good</span><small>3 days</small></button>
+            <button type="button" data-rating="easy"><span>Easy</span><small>7 days</small></button>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" data-view="studies" aria-labelledby="studiesTitle">
+        <div class="eyebrow-row"><span class="eyebrow">YOUR LIBRARY</span><span id="studyCount">0 studies</span></div>
+        <h1 id="studiesTitle">Studies</h1>
+        <p class="page-intro">Each study stays private on this device.</p>
+        <div class="study-list" id="studyList"></div>
+        <button class="secondary-action full-width" type="button" data-view-target="connect">Connect another study</button>
+      </section>
+
+      <section class="view" data-view="connect" aria-labelledby="connectTitle">
+        <div class="eyebrow-row"><span class="eyebrow">PRIVATE TRANSFER</span><span>NO CLOUD DATA</span></div>
+        <h1 id="connectTitle">Connect LinguaLoop</h1>
+        <p class="page-intro">Send a reduced study pack directly from LinguaLoop 3. Your personal vocabulary is never stored on this website.</p>
+        <div class="connect-visual" aria-hidden="true">
+          <div class="device desktop"><span></span><span></span><span></span></div>
+          <div class="transfer-line"><i></i><b>•••</b></div>
+          <div class="device phone"><span></span><span></span><span></span></div>
+        </div>
+        <ol class="connect-steps">
+          <li><span>1</span><div><strong>Open LinguaLoop 3</strong><small>Choose <b>Send to phone</b> from Studies.</small></div></li>
+          <li><span>2</span><div><strong>Scan its QR code</strong><small>Your phone opens this app securely.</small></div></li>
+          <li><span>3</span><div><strong>Confirm the study</strong><small>It is stored here for offline practice.</small></div></li>
+        </ol>
+        <div class="connection-status"><i></i><div><strong>Ready to receive</strong><small>Waiting for a LinguaLoop study pack</small></div></div>
+        <button class="demo-button" id="loadDemoButton" type="button">Load a small demo study</button>
+        <p class="privacy-note">The demo contains public sample phrases and can be removed at any time.</p>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Primary navigation">
+      <button class="active" type="button" data-view-target="today"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z"/></svg><span>Today</span></button>
+      <button type="button" data-view-target="practice"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM9 4v16"/></svg><span>Practice</span></button>
+      <button type="button" data-view-target="studies"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v11H4z"/></svg><span>Studies</span></button>
+      <button type="button" data-view-target="connect"><svg viewBox="0 0 24 24"><path d="M8 12a4 4 0 0 1 4-4h3M16 12a4 4 0 0 1-4 4H9M13 5l2 3-2 3M11 19l-2-3 2-3"/></svg><span>Connect</span></button>
+    </nav>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
