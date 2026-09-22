@@ -12,6 +12,7 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Recall cards with four review ratings
 - Written recall
 - Multiple studies stored locally
+- Full-row study switching and protected on-device deletion
 - Offline PWA support
 - Private same-Wi-Fi QR and clipboard transfer from LinguaLoop 3
 - Compressed `#packz=` payload import with legacy `#pack=` compatibility
