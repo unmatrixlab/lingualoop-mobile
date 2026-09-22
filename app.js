@@ -9,7 +9,8 @@
 
   const state = {
     library: { version: 1, activeStudyId: '', studies: [] },
-    view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false
+    view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
+    pendingDeleteStudyId: '', pendingDeleteTimer: null
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -111,18 +112,63 @@
     els.writeCount.textContent = cards.length;
     els.startReview.disabled = !cards.length;
     els.activeStudyTitle.textContent = study?.name || 'No study yet';
-    els.activeStudySummary.innerHTML = study ? `<div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div><div><strong>${escapeHtml(study.name)}</strong><small>${cards.length} words · ${due.length} due now</small></div><span>→</span>` : '<div class="study-swatch"></div><div><strong>Connect LinguaLoop 3</strong><small>Your selected vocabulary will appear here.</small></div><span>→</span>';
+    els.activeStudySummary.innerHTML = study ? `<div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div><div><strong>${escapeHtml(study.name)}</strong><small>${cards.length} words · ${due.length} due now</small></div><span>Manage →</span>` : '<div class="study-swatch"></div><div><strong>Connect LinguaLoop 3</strong><small>Load your first study from the computer.</small></div><span>Connect →</span>';
+    els.activeStudySummary.dataset.viewTarget = study ? 'studies' : 'connect';
+    els.activeStudySummary.tabIndex = 0;
+    els.activeStudySummary.setAttribute('role', 'button');
+    els.activeStudySummary.setAttribute('aria-label', study ? `Manage studies. ${study.name} is active.` : 'Connect your first LinguaLoop study');
+    els.activeStudySummary.classList.add('interactive');
     renderStudies();
   }
 
   function renderStudies() {
     const studies = state.library.studies;
     els.studyCount.textContent = `${studies.length} ${studies.length === 1 ? 'study' : 'studies'}`;
-    els.studyList.innerHTML = studies.length ? studies.map(study => `<article data-study-id="${escapeHtml(study.id)}">
-      <div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div>
-      <div><strong>${escapeHtml(study.name)}</strong><small>${study.cards.length} words · ${dueCards(study).length} due</small></div>
-      <button type="button" data-study-open="${escapeHtml(study.id)}" aria-label="Use ${escapeHtml(study.name)}">${study.id === state.library.activeStudyId ? '✓' : '→'}</button>
-    </article>`).join('') : '<article class="empty-library"><strong>Your library is empty</strong>Open Studies in LinguaLoop 3 and choose Send to phone.</article>';
+    els.studyList.innerHTML = studies.length ? studies.map(study => {
+      const active = study.id === state.library.activeStudyId;
+      const confirming = study.id === state.pendingDeleteStudyId;
+      return `<article class="${active ? 'active' : ''}${confirming ? ' confirming-delete' : ''}" data-study-id="${escapeHtml(study.id)}">
+        <button class="study-select-button" type="button" data-study-open="${escapeHtml(study.id)}" aria-pressed="${active}" aria-label="${active ? 'Active study' : 'Use'} ${escapeHtml(study.name)}">
+          <span class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></span>
+          <span class="study-list-copy"><strong>${escapeHtml(study.name)}</strong><small>${study.cards.length} words · ${dueCards(study).length} due</small></span>
+          <span class="study-active-state">${active ? 'ACTIVE' : 'USE'}</span>
+        </button>
+        <button class="study-delete-button" type="button" data-study-delete="${escapeHtml(study.id)}" aria-label="${confirming ? 'Confirm deleting' : 'Delete'} ${escapeHtml(study.name)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>
+          <span>${confirming ? 'DELETE?' : ''}</span>
+        </button>
+      </article>`;
+    }).join('') : '<article class="empty-library"><strong>Your library is empty</strong>Open Studies in LinguaLoop 3 and choose Send to phone.</article>';
+  }
+
+  function clearPendingStudyDelete(renderList = false) {
+    clearTimeout(state.pendingDeleteTimer);
+    state.pendingDeleteTimer = null;
+    if (!state.pendingDeleteStudyId) return;
+    state.pendingDeleteStudyId = '';
+    if (renderList) renderStudies();
+  }
+
+  async function requestStudyDelete(studyId) {
+    const study = state.library.studies.find(item => item.id === studyId);
+    if (!study) return;
+    if (state.pendingDeleteStudyId !== studyId) {
+      clearPendingStudyDelete();
+      state.pendingDeleteStudyId = studyId;
+      state.pendingDeleteTimer = setTimeout(() => clearPendingStudyDelete(true), 4000);
+      renderStudies();
+      showToast(`Tap Delete again to remove ${study.name}`);
+      return;
+    }
+    clearPendingStudyDelete();
+    state.library.studies = state.library.studies.filter(item => item.id !== studyId);
+    if (state.library.activeStudyId === studyId) state.library.activeStudyId = state.library.studies[0]?.id || '';
+    state.queue = [];
+    state.index = 0;
+    await saveLibrary();
+    render();
+    showToast(`${study.name} removed from this phone`);
+    if (!state.library.studies.length) showView('connect');
   }
 
   function startPractice(mode = 'cards') {
@@ -318,11 +364,13 @@
   function showToast(message) { clearTimeout(toastTimer); els.toast.textContent = message; els.toast.classList.add('show'); toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2200); }
 
   document.addEventListener('click', event => {
+    const deleteButton = event.target.closest('[data-study-delete]'); if (deleteButton) { requestStudyDelete(deleteButton.dataset.studyDelete); return; }
     const viewButton = event.target.closest('[data-view-target]'); if (viewButton) showView(viewButton.dataset.viewTarget);
     const practiceButton = event.target.closest('[data-practice-mode]'); if (practiceButton) { startPractice(practiceButton.dataset.practiceMode); showView('practice'); }
-    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { state.library.activeStudyId = studyButton.dataset.studyOpen; saveLibrary(); render(); showView('today'); }
+    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); state.library.activeStudyId = studyButton.dataset.studyOpen; saveLibrary(); render(); showToast(`${activeStudy()?.name || 'Study'} is now active`); }
     const rating = event.target.closest('[data-rating]'); if (rating) rateCard(rating.dataset.rating);
   });
+  els.activeStudySummary.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showView(els.activeStudySummary.dataset.viewTarget); } });
   els.startReview.addEventListener('click', () => { startPractice('cards'); showView('practice'); });
   els.reveal.addEventListener('click', revealAnswer);
   els.speak.addEventListener('click', speakCurrent);
