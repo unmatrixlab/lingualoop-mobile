@@ -13,11 +13,14 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Written recall
 - Multiple studies stored locally
 - Offline PWA support
-- Incoming `#pack=` payload support for the future LinguaLoop 3 QR transfer
+- Private same-Wi-Fi QR transfer from LinguaLoop 3
+- Compressed `#packz=` payload import with legacy `#pack=` compatibility
 
 ## Study pack format
 
-The first protocol version accepts a Base64URL-encoded JSON object in the URL fragment:
+LinguaLoop 3 creates a short-lived local QR route. The phone receives the selected studies directly from the computer and opens this PWA with a DEFLATE-compressed Base64URL payload in the URL fragment. GitHub Pages never receives the fragment or the vocabulary.
+
+The decoded study pack uses this structure:
 
 ```json
 {
