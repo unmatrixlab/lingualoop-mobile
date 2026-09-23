@@ -12,8 +12,8 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Recall cards with four review ratings
 - Written recall
 - English and Spanish card pronunciation
-- Exact YouTube source clips attached to eligible vocabulary cards
-- Full-video comprehension view for YouTube studies
+- Complete bilingual transcripts with individual and continuous device-voice reading
+- Full-video comprehension with active-subtitle following, direct seeking and linked clip playback
 - Multiple studies stored locally
 - Full-row study switching and protected on-device deletion
 - Offline PWA support
@@ -30,7 +30,7 @@ The decoded study pack uses this structure:
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "studies": [{
     "id": "stable-project-id",
     "name": "Study name",
@@ -40,6 +40,14 @@ The decoded study pack uses this structure:
       "id": "YouTube-video-id",
       "name": "Source video title"
     },
+    "transcript": [{
+      "id": "subtitle-1",
+      "start": 42.2,
+      "end": 45.1,
+      "en": "Complete English subtitle.",
+      "es": "Subtítulo completo en español.",
+      "chain": 0
+    }],
     "cards": [{
       "id": "stable-card-id",
       "english": "Target phrase",
