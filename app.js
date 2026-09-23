@@ -381,13 +381,29 @@
     return youtubeApiPromise;
   }
 
-  function recreateStudyVideoHost() {
+  function studyVideoEmbedUrl(media, { start = 0, end = 0, autoplay = false } = {}) {
+    if (!media?.id) return '';
+    const params = new URLSearchParams({
+      controls: '1', playsinline: '1', rel: '0', cc_load_policy: '0', iv_load_policy: '3',
+      enablejsapi: '1', origin: location.origin
+    });
+    if (autoplay) params.set('autoplay', '1');
+    if (Number(start) > 0) params.set('start', String(Math.max(0, Math.floor(Number(start)))));
+    if (Number(end) > Number(start)) params.set('end', String(Math.max(1, Math.ceil(Number(end)))));
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(media.id)}?${params}`;
+  }
+
+  function recreateStudyVideoHost(media = null, options = {}) {
     const wrapper = $('.study-video-frame');
     if (!wrapper) return null;
     wrapper.replaceChildren();
-    const host = document.createElement('div');
+    const host = document.createElement('iframe');
     host.id = 'studyVideoFrame';
+    host.title = 'Complete YouTube study video';
     host.setAttribute('aria-label', 'Complete YouTube study video');
+    host.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+    host.setAttribute('allowfullscreen', '');
+    if (media) host.src = studyVideoEmbedUrl(media, options);
     wrapper.append(host);
     els.studyVideoFrame = host;
     return host;
@@ -434,13 +450,12 @@
     destroyStudyVideo();
     state.fullVideoStudyId = study.id;
     const expectedStudyId = study.id;
+    const fallbackFrame = recreateStudyVideoHost(media, { autoplay: restart });
     state.studyVideoLoadPromise = ensureYouTubeApi().then(() => new Promise((resolve, reject) => {
       if (activeStudy()?.id !== expectedStudyId) { resolve(null); return; }
-      const host = recreateStudyVideoHost();
+      const host = fallbackFrame?.isConnected ? fallbackFrame : els.studyVideoFrame;
       if (!host) { reject(new Error('Video container is unavailable')); return; }
       state.studyVideoPlayer = new YT.Player(host, {
-        videoId: media.id,
-        playerVars: { controls: 1, playsinline: 1, rel: 0, cc_load_policy: 0, iv_load_policy: 3, origin: location.origin },
         events: {
           onReady: event => {
             state.studyVideoReady = true;
@@ -461,7 +476,8 @@
       });
     })).catch(error => {
       state.studyVideoLoadPromise = null;
-      showToast(error.message || 'YouTube player is unavailable');
+      state.studyVideoReady = false;
+      showToast('Video ready · live subtitle follow is temporarily unavailable');
       return null;
     });
     return state.studyVideoLoadPromise;
@@ -542,8 +558,14 @@
       if (playClip) showToast('This transcript has no linked YouTube video');
       return;
     }
+    const media = normalizeYouTubeMedia(study?.media);
     const player = await loadStudyVideo(false);
-    if (!player) return;
+    if (!player) {
+      if (els.studyVideoFrame?.tagName === 'IFRAME') {
+        els.studyVideoFrame.src = studyVideoEmbedUrl(media, { start: range.start, end: playClip ? range.end : 0, autoplay: playClip });
+      }
+      return;
+    }
     try {
       player.seekTo(range.start, true);
       state.studyVideoClipEnd = playClip ? range.end : 0;
