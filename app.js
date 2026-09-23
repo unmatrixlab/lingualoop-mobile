@@ -11,7 +11,8 @@
     library: { version: 1, activeStudyId: '', studies: [] },
     view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
     pendingDeleteStudyId: '', pendingDeleteTimer: null, fullVideoStudyId: '',
-    studyVideoPlayer: null, studyVideoReady: false, studyVideoPoll: null, studyVideoClipEnd: 0,
+    studyVideoPlayer: null, studyVideoReady: false, studyVideoPlaying: false, studyVideoPoll: null, studyVideoClipEnd: 0,
+    transcriptVideoActionId: 0,
     transcriptSelectedIndex: -1, transcriptActiveIndex: -1, transcriptReadingIndex: -1,
     transcriptLanguage: localStorage.getItem('lingualoop.mobile.transcriptLanguage') || 'both',
     transcriptSpeed: Number(localStorage.getItem('lingualoop.mobile.transcriptSpeed')) || .9,
@@ -419,6 +420,7 @@
     try { state.studyVideoPlayer?.destroy?.(); } catch { /* YouTube may already have removed the iframe. */ }
     state.studyVideoPlayer = null;
     state.studyVideoReady = false;
+    state.studyVideoPlaying = false;
     state.studyVideoLoadPromise = null;
     state.studyVideoClipEnd = 0;
     state.fullVideoStudyId = '';
@@ -428,7 +430,19 @@
   function pauseStudyVideo() {
     stopStudyVideoPolling();
     state.studyVideoClipEnd = 0;
-    try { state.studyVideoPlayer?.pauseVideo?.(); } catch { /* Player is optional. */ }
+    state.studyVideoPlaying = false;
+    if (state.studyVideoPlayer?.pauseVideo) {
+      try { state.studyVideoPlayer.pauseVideo(); } catch { /* Player is optional. */ }
+      return;
+    }
+    const study = activeStudy();
+    const media = normalizeYouTubeMedia(study?.media);
+    if (media && els.studyVideoFrame?.tagName === 'IFRAME') {
+      const cues = activeTranscript();
+      const index = state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
+      els.studyVideoFrame.src = studyVideoEmbedUrl(media, { start: cues[index]?.start || 0 });
+    }
+    updateTranscriptPosition();
   }
 
   function startStudyVideoPolling() {
@@ -464,12 +478,15 @@
           },
           onStateChange: event => {
             if (event.data === window.YT?.PlayerState?.PLAYING) {
+              state.studyVideoPlaying = true;
               stopTranscriptSpeech();
               startStudyVideoPolling();
             } else {
+              state.studyVideoPlaying = false;
               stopStudyVideoPolling();
               updateStudyVideoTime();
             }
+            updateTranscriptPosition();
           },
           onError: () => showToast('This YouTube video could not be played')
         }
@@ -502,9 +519,7 @@
   function transcriptCueRange(index, cues = activeTranscript()) {
     const cue = cues[index];
     if (!cue) return null;
-    if (!cue.chain) return { start: cue.start, end: cue.end };
-    const linked = cues.filter(item => item.chain === cue.chain);
-    return { start: Math.min(...linked.map(item => item.start)), end: Math.max(...linked.map(item => item.end)) };
+    return { start: cue.start, end: cue.end };
   }
 
   function transcriptRow(index) {
@@ -519,16 +534,27 @@
   function updateTranscriptPosition() {
     const cues = activeTranscript();
     const index = state.transcriptReadingIndex >= 0 ? state.transcriptReadingIndex : state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
-    els.transcriptPosition.textContent = index >= 0 ? `Subtitle ${index + 1} of ${cues.length} · ${formatClipTime(cues[index]?.start)}` : `${cues.length} subtitles · choose a line`;
+    const interaction = state.transcriptSpeechActive
+      ? 'Reading'
+      : state.studyVideoPlaying
+        ? 'Playing'
+        : index === state.transcriptSelectedIndex
+          ? 'Tap again to play'
+          : '';
+    els.transcriptPosition.textContent = index >= 0
+      ? `Subtitle ${index + 1} of ${cues.length} · ${formatClipTime(cues[index]?.start)}${interaction ? ` · ${interaction}` : ''}`
+      : `${cues.length} subtitles · choose a line`;
   }
 
   function setTranscriptMarker(kind, index) {
     const property = kind === 'active' ? 'transcriptActiveIndex' : kind === 'reading' ? 'transcriptReadingIndex' : 'transcriptSelectedIndex';
     const previous = state[property];
-    if (previous === index) return;
+    if (previous === index) { updateTranscriptPosition(); return; }
     transcriptRow(previous)?.classList.remove(kind);
+    if (kind === 'selected') transcriptRow(previous)?.querySelector('[data-transcript-select]')?.setAttribute('aria-pressed', 'false');
     state[property] = index;
     transcriptRow(index)?.classList.add(kind);
+    if (kind === 'selected') transcriptRow(index)?.querySelector('[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
     updateTranscriptPosition();
     if ((kind === 'active' || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
   }
@@ -547,30 +573,45 @@
     }
   }
 
-  async function selectTranscriptCue(index, playClip = false) {
+  async function selectTranscriptCue(index, mode = 'select') {
     const cues = activeTranscript();
     const range = transcriptCueRange(index, cues);
     if (!range) return;
+    const actionId = ++state.transcriptVideoActionId;
+    const shouldPlay = mode === 'continuous' || mode === 'clip';
     stopTranscriptSpeech();
     setTranscriptMarker('selected', index);
     const study = activeStudy();
     if (!normalizeYouTubeMedia(study?.media)) {
-      if (playClip) showToast('This transcript has no linked YouTube video');
+      if (shouldPlay) showToast('This transcript has no linked YouTube video');
       return;
     }
     const media = normalizeYouTubeMedia(study?.media);
     const player = await loadStudyVideo(false);
+    if (actionId !== state.transcriptVideoActionId) return;
     if (!player) {
       if (els.studyVideoFrame?.tagName === 'IFRAME') {
-        els.studyVideoFrame.src = studyVideoEmbedUrl(media, { start: range.start, end: playClip ? range.end : 0, autoplay: playClip });
+        els.studyVideoFrame.src = studyVideoEmbedUrl(media, { start: range.start, end: mode === 'clip' ? range.end : 0, autoplay: shouldPlay });
+        state.studyVideoPlaying = shouldPlay;
+        updateTranscriptPosition();
       }
       return;
     }
     try {
+      state.studyVideoClipEnd = 0;
+      player.pauseVideo();
       player.seekTo(range.start, true);
-      state.studyVideoClipEnd = playClip ? range.end : 0;
-      if (playClip) player.playVideo();
+      state.studyVideoClipEnd = mode === 'clip' ? range.end : 0;
+      if (shouldPlay) player.playVideo();
     } catch { showToast('The video could not move to this subtitle'); }
+  }
+
+  function activateTranscriptCue(index) {
+    if (state.studyVideoPlaying) {
+      selectTranscriptCue(index, 'select');
+      return;
+    }
+    selectTranscriptCue(index, state.transcriptSelectedIndex === index ? 'continuous' : 'select');
   }
 
   function clearTranscriptSpeechState() {
@@ -690,7 +731,7 @@
       state.transcriptReadingIndex = -1;
     }
     els.transcriptList.innerHTML = cues.map((cue, index) => `<article class="transcript-cue${index === state.transcriptSelectedIndex ? ' selected' : ''}${index === state.transcriptActiveIndex ? ' active' : ''}${index === state.transcriptReadingIndex ? ' reading' : ''}" data-transcript-index="${index}" data-language="${escapeHtml(state.transcriptLanguage)}">
-      <button class="transcript-cue-main" type="button" data-transcript-select="${index}" aria-label="Select subtitle ${index + 1} at ${escapeHtml(formatClipTime(cue.start))}"><time>${escapeHtml(formatClipTime(cue.start))}</time><span class="transcript-cue-copy">${cue.chain ? `<i class="transcript-cue-chain">LINKED ${cue.chain}</i>` : ''}<strong>${escapeHtml(cue.en)}</strong><small>${escapeHtml(cue.es)}</small></span></button>
+      <button class="transcript-cue-main" type="button" data-transcript-select="${index}" aria-pressed="${index === state.transcriptSelectedIndex}" aria-label="Select subtitle ${index + 1} at ${escapeHtml(formatClipTime(cue.start))}. Tap the selected subtitle again to play continuously."><time>${escapeHtml(formatClipTime(cue.start))}</time><span class="transcript-cue-copy"><strong>${escapeHtml(cue.en)}</strong><small>${escapeHtml(cue.es)}</small></span></button>
       <span class="transcript-cue-tools"><button type="button" data-transcript-speak="${index}" aria-label="Speak subtitle ${index + 1}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button><button type="button" data-transcript-clip="${index}" aria-label="Play linked video for subtitle ${index + 1}" ${media ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg></button></span>
     </article>`).join('');
     els.transcriptLanguages.forEach(button => button.classList.toggle('active', button.dataset.transcriptLanguage === state.transcriptLanguage));
@@ -840,8 +881,8 @@
 
   document.addEventListener('click', event => {
     const transcriptSpeak = event.target.closest('[data-transcript-speak]'); if (transcriptSpeak) { speakTranscriptCue(Number(transcriptSpeak.dataset.transcriptSpeak)); return; }
-    const transcriptClip = event.target.closest('[data-transcript-clip]'); if (transcriptClip) { selectTranscriptCue(Number(transcriptClip.dataset.transcriptClip), true); return; }
-    const transcriptSelect = event.target.closest('[data-transcript-select]'); if (transcriptSelect) { selectTranscriptCue(Number(transcriptSelect.dataset.transcriptSelect), false); return; }
+    const transcriptClip = event.target.closest('[data-transcript-clip]'); if (transcriptClip) { selectTranscriptCue(Number(transcriptClip.dataset.transcriptClip), 'clip'); return; }
+    const transcriptSelect = event.target.closest('[data-transcript-select]'); if (transcriptSelect) { activateTranscriptCue(Number(transcriptSelect.dataset.transcriptSelect)); return; }
     const transcriptLanguage = event.target.closest('[data-transcript-language]'); if (transcriptLanguage) {
       state.transcriptLanguage = transcriptLanguage.dataset.transcriptLanguage;
       localStorage.setItem('lingualoop.mobile.transcriptLanguage', state.transcriptLanguage);
