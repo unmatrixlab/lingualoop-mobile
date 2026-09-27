@@ -8,15 +8,19 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 
 ## Current scope
 
-- Daily due queue
-- Recall cards with four review ratings and growing review intervals
-- Written English recall inside the original study sentence
-- Difficult words return later in the same session (up to two additional attempts)
+- Bounded daily sessions of 5, 8 or 10 words from the current study or all studies
+- Evidence-aware spacing: same-day repeats and guided practice do not inflate mastery
+- Adaptive recall cards, written contextual recall and listening practice; single-skill sessions remain available
+- Progressive meaning/spelling hints and a gentle retry before showing the answer
+- A stable session goal with a final pass for difficult words when other words intervene
+- Automatic session and written-draft recovery after reopening
+- Learned words can be removed from phone practice with confirmation, Undo and permanent access to Restore in Studies
+- Removals and phone progress survive updated desktop imports
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
 - Full-video comprehension with active-subtitle following, direct seeking and individual subtitle clips; desktop chains do not affect phone playback
 - Saved words and phrases highlighted throughout the English transcript using their vocabulary colors
-- Tap a marked word for its saved meaning, pronunciation and contextual practice; return to the same passage
+- Tap a marked word for its saved meaning, pronunciation and inline guided practice without leaving the passage
 - Read-only view, English/Spanish/both display and a filter for lines containing saved words
 - Multiple studies stored locally
 - Full-row study switching and protected on-device deletion
@@ -69,3 +73,11 @@ The decoded study pack uses this structure:
   }]
 }
 ```
+
+## Learning and recovery
+
+Today offers a small mixed session and Continue reading. Practice options retains Cards, Write and Listen. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
+
+The phone stores its unfinished session, typed draft, evidence and progress in the existing local library. Importing the same study preserves these fields by stable study and word IDs. Removing a word as learned archives it locally rather than deleting desktop vocabulary; it disappears from phone practice and transcript vocabulary highlighting. Use Studies → Learned words → Restore to bring it back. Reimports preserve removal records even when a removed word is temporarily absent from the incoming pack.
+
+Device speech is initiated by a tap. Voices depend on the phone; listening falls back to written practice if speech is unavailable. No remote AI or analytics service is required for learning. YouTube remains online-only.
