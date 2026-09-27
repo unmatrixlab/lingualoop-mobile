@@ -9,7 +9,7 @@
   <title>LinguaLoop Mobile</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 <body>
   <div class="app-shell">
@@ -133,22 +133,30 @@
       </section>
 
       <section class="view" data-view="video" aria-label="Video and transcript">
-        <div class="eyebrow-row"><button id="toggleStudyVideo" type="button" class="text-button" aria-expanded="true" aria-controls="studyVideoReady">Hide video</button><span id="studyTranscriptSummary">FULL STUDY</span></div>
         <div class="study-video-workspace">
-        <section class="study-video-card" id="studyVideoReady" hidden>
-          <div class="study-video-frame"><div id="studyVideoFrame" aria-label="Complete YouTube study video"></div></div>
+        <div id="transcriptDockAnchor" aria-hidden="true"></div>
+        <section class="transcript-dock" id="transcriptDock" aria-label="Video and transcript controls">
+          <section class="study-video-card" id="studyVideoReady" hidden>
+            <div class="study-video-frame"><div id="studyVideoFrame" aria-label="Complete YouTube study video"></div></div>
+          </section>
+          <div class="transcript-navigation" id="transcriptNavigation" hidden>
+            <div class="transcript-navigation-row">
+              <button class="transcript-locate" id="transcriptLastSelection" type="button" disabled aria-label="Return to last selected subtitle" title="Return to last selected subtitle without moving the video"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg></button>
+              <button class="transcript-jump-button" id="transcriptJumpButton" type="button" aria-label="Go to subtitle number" aria-expanded="false" aria-controls="transcriptJumpForm"><span id="transcriptBrowsePosition">1 / 1</span></button>
+              <button class="transcript-controls-button" id="transcriptControlsButton" type="button" aria-expanded="true" aria-controls="transcriptControls">Controls <span aria-hidden="true">⌃</span></button>
+              <button class="transcript-follow-button active" id="studyTranscriptFollowButton" type="button" aria-pressed="true" title="Follow the playing subtitle"><i></i><span>Follow</span></button>
+            </div>
+            <input class="transcript-navigator" id="transcriptNavigator" type="range" min="1" max="1" value="1" step="1" aria-label="Browse subtitles without moving the video">
+            <form id="transcriptJumpForm" class="transcript-jump-form" hidden>
+              <label for="transcriptJumpInput">Subtitle</label><input id="transcriptJumpInput" type="number" inputmode="numeric" min="1" max="1" required aria-label="Subtitle number"><button type="submit">Go</button><button id="transcriptJumpCancel" type="button" aria-label="Cancel subtitle navigation">×</button>
+            </form>
+          </div>
+          <div id="transcriptControls" class="transcript-controls">
           <div class="study-video-info"><div><span>NOW WATCHING</span><strong id="studyVideoTitle">Study video</strong><small id="studyVideoMeta"></small></div><button class="secondary-action" id="restartStudyVideoButton" type="button">Start over</button></div>
-
-        </section>
-        <section class="video-empty" id="studyVideoEmpty">
-          <span aria-hidden="true">▶</span><h2>No YouTube video in this study</h2><p>The imported transcript can still be read and spoken. Video-linked playback appears for YouTube studies.</p>
-          <button class="secondary-action" type="button" data-view-target="studies">Choose another study</button>
-        </section>
-        <section class="transcript-panel" id="studyTranscriptPanel" hidden aria-labelledby="studyTranscriptTitle">
-          <header class="transcript-header">
-            <div><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></div>
-            <button class="transcript-follow-button active" id="studyTranscriptFollowButton" type="button" aria-pressed="true"><i></i><span>Follow</span></button>
-          </header>
+            <header class="transcript-header">
+              <div><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></div>
+              <button id="toggleStudyVideo" type="button" class="text-button" aria-expanded="true" aria-controls="studyVideoReady">Hide video</button>
+            </header>
           <div class="transcript-reader">
             <div class="transcript-language" role="group" aria-label="Transcript language">
               <button type="button" data-transcript-language="en">EN</button>
@@ -160,6 +168,14 @@
             <button class="transcript-stop-button" id="studyTranscriptStopButton" type="button" disabled aria-label="Stop transcript reading">■</button>
           </div>
           <div class="transcript-focus"><span id="transcriptVocabularyHint">Tap a marked word to study it</span><button type="button" id="transcriptWordsButton" aria-pressed="false">My words</button></div>
+            <span id="studyTranscriptSummary" class="sr-only">FULL STUDY</span>
+          </div>
+        </section>
+        <section class="video-empty" id="studyVideoEmpty">
+          <span aria-hidden="true">▶</span><h2>No YouTube video in this study</h2><p>The imported transcript can still be read and spoken. Video-linked playback appears for YouTube studies.</p>
+          <button class="secondary-action" type="button" data-view-target="studies">Choose another study</button>
+        </section>
+        <section class="transcript-panel" id="studyTranscriptPanel" hidden aria-labelledby="studyTranscriptTitle">
           <div class="transcript-list" id="studyTranscriptList"></div>
         </section>
         <section class="video-empty transcript-empty" id="studyTranscriptEmpty">
@@ -229,6 +245,6 @@
     <button id="wordSheetPractice" class="primary-action full-width" type="button">Practice this word</button>
   </dialog>
   <script src="learning.js?v=1"></script>
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

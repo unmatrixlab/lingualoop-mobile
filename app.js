@@ -20,7 +20,8 @@
     studyVideoGeneration: 0, studyVideoPlayer: null, studyVideoReady: false, studyVideoPlaying: false, studyVideoPoll: null, studyVideoClipEnd: 0,
     transcriptVideoActionId: 0, transcriptSeekTarget: null,
     transcriptSelectedIndex: -1, transcriptActiveIndex: -1, transcriptReadingIndex: -1,
-    transcriptStudyId: '',
+    transcriptStudyId: '', transcriptMarkerIndex: -1, transcriptBrowseIndex: -1,
+    transcriptFollowSuspended: false, transcriptCompact: false, transcriptControlsPinned: false,
     transcriptLanguage: readPreference('lingualoop.mobile.transcriptLanguage') || 'both',
     transcriptSpeed: Number(readPreference('lingualoop.mobile.transcriptSpeed')) || .9,
     transcriptFollow: readPreference('lingualoop.mobile.transcriptFollow') !== 'false',
@@ -31,6 +32,10 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const els = {
+    transcriptDock: $('#transcriptDock'), transcriptDockAnchor: $('#transcriptDockAnchor'), transcriptNavigation: $('#transcriptNavigation'),
+    transcriptControls: $('#transcriptControls'), transcriptControlsButton: $('#transcriptControlsButton'), transcriptLastSelection: $('#transcriptLastSelection'),
+    transcriptBrowsePosition: $('#transcriptBrowsePosition'), transcriptNavigator: $('#transcriptNavigator'), transcriptJumpButton: $('#transcriptJumpButton'),
+    transcriptJumpForm: $('#transcriptJumpForm'), transcriptJumpInput: $('#transcriptJumpInput'), transcriptJumpCancel: $('#transcriptJumpCancel'),
     wordSheet: $('#wordSheet'), wordSheetTitle: $('#wordSheetTitle'), wordSheetMeaning: $('#wordSheetMeaning'), wordSheetContext: $('#wordSheetContext'), wordSheetSpeak: $('#wordSheetSpeak'), wordSheetPractice: $('#wordSheetPractice'),
     toggleVideo: $('#toggleStudyVideo'), cardContext: $('#cardContextButton'), practiceSummary: $('#practiceSummary'), practiceDone: $('#practiceDoneButton'),
     transcriptWords: $('#transcriptWordsButton'), transcriptVocabularyHint: $('#transcriptVocabularyHint'),
@@ -175,6 +180,12 @@
 
   function showView(view, { transcriptIndex = -1 } = {}) {
     cancelTranscriptPositioning();
+    closeTranscriptJump();
+    if (state.view !== view) {
+      state.transcriptFollowSuspended = false;
+      state.transcriptControlsPinned = false;
+      setTranscriptCompact(false);
+    }
     if (els.wordSheet.open) els.wordSheet.close();
     if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
     if (state.view === 'practice' && view !== 'practice') closeCardClip();
@@ -187,7 +198,7 @@
       const explicitCue = activeTranscript()[transcriptIndex];
       if (explicitCue) {
         rememberStudyPlayback({ time: explicitCue.start, selectedIndex: transcriptIndex });
-        state.transcriptSelectedIndex = state.transcriptActiveIndex = transcriptIndex;
+        state.transcriptSelectedIndex = state.transcriptActiveIndex = state.transcriptMarkerIndex = transcriptIndex;
       }
       renderStudyVideo();
       if (explicitCue) {
@@ -696,10 +707,45 @@
     return els.transcriptList?.querySelector(`[data-transcript-index="${index}"]`);
   }
 
+  function updateTranscriptFollowButton() {
+    const following = state.transcriptFollow && !state.transcriptFollowSuspended;
+    els.transcriptFollow.classList.toggle('active', following);
+    els.transcriptFollow.classList.toggle('suspended', state.transcriptFollow && state.transcriptFollowSuspended);
+    els.transcriptFollow.setAttribute('aria-pressed', String(following));
+    els.transcriptFollow.title = following ? 'Following playback · tap to stop following' : 'Return to playback and follow the subtitles';
+    els.transcriptFollow.setAttribute('aria-label', following ? 'Follow playback' : 'Resume following playback');
+  }
+
+  function suspendTranscriptFollow() {
+    if (state.view !== 'video') return;
+    state.transcriptFollowSuspended = true;
+    cancelTranscriptPositioning();
+    updateTranscriptFollowButton();
+  }
+
+  function setTranscriptCompact(compact) {
+    state.transcriptCompact = compact;
+    els.transcriptDock.classList.toggle('compact', compact);
+    els.transcriptControlsButton.setAttribute('aria-expanded', String(!compact));
+    els.transcriptControls.inert = compact;
+  }
+
+  function transcriptViewportBounds() {
+    const viewportTop = window.visualViewport?.offsetTop || 0;
+    const dock = els.transcriptDock.getBoundingClientRect();
+    // Reserve the dock's height even before it sticks, so a jump cannot land behind it.
+    const safeTop = Number.parseFloat(getComputedStyle(els.transcriptDock).top) || 0;
+    const top = Math.max(viewportTop, safeTop) + (els.transcriptDock.hidden ? 0 : dock.height) + 8;
+    const bottom = Math.min(viewportTop + (window.visualViewport?.height || innerHeight), $('.bottom-nav').getBoundingClientRect().top) - 8;
+    return { top, bottom: Math.max(top + 60, bottom) };
+  }
+
   function scrollTranscriptTo(index) {
-    if (!state.transcriptFollow || index < 0) return;
+    if (!state.transcriptFollow || state.transcriptFollowSuspended || index < 0) return;
     const row = transcriptRow(index);
-    if (row && !row.hidden) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!row || row.hidden) return;
+    const bounds = transcriptViewportBounds(), rect = row.getBoundingClientRect();
+    if (rect.top < bounds.top || rect.bottom > bounds.bottom) positionTranscriptViewport(index);
   }
 
   let transcriptPositionFrame = 0;
@@ -713,62 +759,119 @@
 
   function positionTranscriptViewport(index) {
     cancelTranscriptPositioning();
+    const target = transcriptRow(index);
+    if (!target || target.hidden) return;
+    if (!state.transcriptControlsPinned) setTranscriptCompact(true);
+    target.classList.add('positioning');
     const studyId = activeStudy()?.id;
     let frames = 0;
     const events = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
     events.forEach(type => window.addEventListener(type, cancelTranscriptPositioning, { passive: true, once: true }));
-    transcriptPositionCleanup = () => events.forEach(type => window.removeEventListener(type, cancelTranscriptPositioning));
+    transcriptPositionCleanup = () => {
+      events.forEach(type => window.removeEventListener(type, cancelTranscriptPositioning));
+      target.classList.remove('positioning');
+    };
     const align = () => {
       const row = transcriptRow(index);
       if (state.view !== 'video' || activeStudy()?.id !== studyId || !row || row.hidden) { cancelTranscriptPositioning(); return; }
       const rect = row.getBoundingClientRect();
-      const top = window.visualViewport?.offsetTop || 0;
-      const bottom = Math.min(top + (window.visualViewport?.height || innerHeight), $('.bottom-nav').getBoundingClientRect().top);
-      const height = Math.max(100, bottom - top - 24);
-      const delta = rect.top + Math.min(rect.height, height) / 2 - (top + bottom) / 2;
-      // Jump directly: smooth scrolling measures lazy-rendered rows before their
-      // real heights are known. Re-align briefly as layout/keyboard settles.
+      const { top, bottom } = transcriptViewportBounds();
+      const height = Math.max(60, bottom - top - 16);
+      const delta = rect.height > height ? rect.top - top - 8 : rect.top + rect.height / 2 - (top + bottom) / 2;
+      // Lazy rows settle after an initial jump; measure the actual visible row.
       if (Math.abs(delta) > 1) scrollTo({ top: Math.max(0, scrollY + delta), behavior: 'instant' });
       if (++frames < 30) transcriptPositionFrame = requestAnimationFrame(align);
-      else cancelTranscriptPositioning();
+      else { cancelTranscriptPositioning(); scheduleTranscriptViewportUpdate(); }
     };
     transcriptPositionFrame = requestAnimationFrame(align);
+    setTranscriptBrowseIndex(index);
   }
 
   function restoreTranscriptViewport() {
     if (state.view !== 'video') return;
-    const index = state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
-    if (index < 0) { scrollTo({ top: 0, behavior: 'auto' }); return; }
+    const index = state.transcriptMarkerIndex;
+    if (index <= 0) { scrollTo({ top: 0, behavior: 'auto' }); return; }
+    positionTranscriptViewport(index);
+  }
+
+  function setTranscriptBrowseIndex(index) {
+    const cues = activeTranscript();
+    if (!cues.length) return;
+    state.transcriptBrowseIndex = Math.max(0, Math.min(cues.length - 1, index));
+    const number = state.transcriptBrowseIndex + 1;
+    els.transcriptBrowsePosition.textContent = `${number} / ${cues.length}`;
+    els.transcriptJumpButton.setAttribute('aria-label', `Browsing subtitle ${number} of ${cues.length}. Go to subtitle number`);
+    if (document.activeElement !== els.transcriptNavigator) els.transcriptNavigator.value = number;
+    els.transcriptNavigator.setAttribute('aria-valuetext', `Subtitle ${number} of ${cues.length}, ${formatClipTime(cues[number - 1].start)}`);
+  }
+
+  let transcriptVisibleRows = [];
+  let transcriptViewportFrame = 0;
+  function scheduleTranscriptViewportUpdate() {
+    if (state.view !== 'video' || transcriptViewportFrame) return;
+    transcriptViewportFrame = requestAnimationFrame(() => {
+      transcriptViewportFrame = 0;
+      if (state.view !== 'video' || !transcriptVisibleRows.length) return;
+      if (!state.transcriptControlsPinned && !state.transcriptCompact && els.transcriptDockAnchor.getBoundingClientRect().top < -40 && els.transcriptJumpForm.hidden) setTranscriptCompact(true);
+      if (transcriptPositionFrame) return;
+      const bounds = transcriptViewportBounds();
+      const center = (bounds.top + bounds.bottom) / 2;
+      let low = 0, high = transcriptVisibleRows.length - 1;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (transcriptVisibleRows[middle].getBoundingClientRect().bottom < center) low = middle + 1;
+        else high = middle;
+      }
+      setTranscriptBrowseIndex(Number(transcriptVisibleRows[low].dataset.transcriptIndex));
+    });
+  }
+
+  function closeTranscriptJump() {
+    els.transcriptJumpForm.hidden = true;
+    els.transcriptJumpButton.setAttribute('aria-expanded', 'false');
+  }
+
+  function browseTranscript(index) {
+    if (!Number.isInteger(index) || !activeTranscript()[index]) return;
+    suspendTranscriptFollow();
+    if (transcriptRow(index)?.hidden) {
+      state.transcriptWordsOnly = false;
+      renderStudyTranscript();
+    }
     positionTranscriptViewport(index);
   }
 
   function updateTranscriptPosition() {
     const cues = activeTranscript();
-    const index = state.transcriptReadingIndex >= 0 ? state.transcriptReadingIndex : state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
-    const interaction = state.transcriptSpeechActive
-      ? 'Reading'
-      : state.studyVideoPlaying
-        ? 'Playing'
-        : index === state.transcriptSelectedIndex
-          ? 'Tap again to play'
-          : '';
+    const index = state.transcriptMarkerIndex;
+    const interaction = state.transcriptReadingIndex >= 0
+      ? (state.transcriptSpeechPaused ? 'Paused' : 'Reading')
+      : state.studyVideoPlaying ? 'Playing' : index === state.transcriptSelectedIndex ? 'Tap again to play' : '';
     els.transcriptPosition.textContent = index >= 0
       ? `Subtitle ${index + 1} of ${cues.length} · ${formatClipTime(cues[index]?.start)}${interaction ? ` · ${interaction}` : ''}`
       : `${cues.length} subtitles · choose a line`;
+    els.transcriptLastSelection.disabled = state.transcriptSelectedIndex < 0;
+    els.transcriptLastSelection.title = state.transcriptSelectedIndex < 0 ? 'Select a subtitle first' : `Return to subtitle ${state.transcriptSelectedIndex + 1} without moving the video`;
   }
 
   function setTranscriptMarker(kind, index, { scroll = true } = {}) {
     const property = kind === 'active' ? 'transcriptActiveIndex' : kind === 'reading' ? 'transcriptReadingIndex' : 'transcriptSelectedIndex';
     const previous = state[property];
-    if (previous === index) { updateTranscriptPosition(); return; }
-    transcriptRow(previous)?.classList.remove(kind);
     if (kind === 'selected') transcriptRow(previous)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'false');
     state[property] = index;
-    transcriptRow(index)?.classList.add(kind);
-    if (kind === 'selected') transcriptRow(index)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
-    if (kind === 'selected' && index >= 0) rememberStudyPlayback({ time: activeTranscript()[index]?.start, selectedIndex: index });
+    if (index >= 0 && index !== state.transcriptMarkerIndex) {
+      transcriptRow(state.transcriptMarkerIndex)?.classList.remove('active');
+      transcriptRow(state.transcriptMarkerIndex)?.removeAttribute('aria-current');
+      state.transcriptMarkerIndex = index;
+      transcriptRow(index)?.classList.add('active');
+      transcriptRow(index)?.setAttribute('aria-current', 'true');
+    }
+    if (kind === 'selected' && index >= 0) {
+      transcriptRow(index)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
+      rememberStudyPlayback({ time: activeTranscript()[index]?.start, selectedIndex: index });
+    }
     updateTranscriptPosition();
-    if (scroll && ((kind === 'active' && state.studyVideoPlaying) || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
+    if (scroll && previous !== index && ((kind === 'active' && state.studyVideoPlaying) || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
   }
 
   function updateStudyVideoTime() {
@@ -798,6 +901,8 @@
     let actionId = ++state.transcriptVideoActionId;
     const shouldPlay = mode === 'continuous' || mode === 'clip';
     stopTranscriptSpeech();
+    state.transcriptFollowSuspended = false;
+    updateTranscriptFollowButton();
     setTranscriptMarker('selected', index);
     setTranscriptMarker('active', index, { scroll: false });
     rememberStudyPlayback({ time: range.start, selectedIndex: index, persist: true });
@@ -915,6 +1020,7 @@
       if (state.transcriptSpeechPaused) { speechSynthesis.resume(); state.transcriptSpeechPaused = false; }
       else { speechSynthesis.pause(); state.transcriptSpeechPaused = true; }
       updateTranscriptSpeechControls();
+      updateTranscriptPosition();
       return;
     }
     const cues = activeTranscript();
@@ -923,7 +1029,9 @@
     stopSpeech();
     state.transcriptSpeechActive = true;
     state.transcriptSpeechPaused = false;
-    const start = Math.max(0, state.transcriptSelectedIndex >= 0 ? state.transcriptSelectedIndex : state.transcriptActiveIndex);
+    state.transcriptFollowSuspended = false;
+    updateTranscriptFollowButton();
+    const start = Math.max(0, state.transcriptMarkerIndex);
     const runId = ++state.transcriptSpeechRunId;
     updateTranscriptSpeechControls();
     speakTranscriptSequence(runId, start, 0);
@@ -966,15 +1074,24 @@
     const media = normalizeYouTubeMedia(study?.media);
     if (!['en', 'es', 'both'].includes(state.transcriptLanguage)) state.transcriptLanguage = 'both';
     els.transcriptPanel.hidden = !cues.length;
+    els.transcriptNavigation.hidden = !cues.length;
+    els.transcriptDock.hidden = !cues.length && !media;
+    els.transcriptDock.querySelector('.study-video-info').hidden = !media;
+    els.transcriptControls.querySelector('.transcript-reader').hidden = !cues.length;
+    els.transcriptControls.querySelector('.transcript-focus').hidden = !cues.length;
     els.transcriptEmpty.hidden = Boolean(cues.length);
     els.transcriptSummary.textContent = cues.length ? `${cues.length} SUBTITLES` : 'FULL STUDY';
-    if (!cues.length) { els.transcriptList.replaceChildren(); return; }
+    if (!cues.length) { transcriptVisibleRows = []; els.transcriptList.replaceChildren(); setTranscriptCompact(false); return; }
     if (state.transcriptStudyId !== study.id) {
       state.transcriptStudyId = study.id;
       const playback = playbackForStudy(study);
       state.transcriptSelectedIndex = playback.selectedIndex;
       state.transcriptActiveIndex = transcriptCueIndexAt(playback.time, cues);
       state.transcriptReadingIndex = -1;
+      state.transcriptMarkerIndex = state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
+      state.transcriptFollowSuspended = false;
+      state.transcriptControlsPinned = false;
+      setTranscriptCompact(false);
     }
     const vocabulary = learning.indexFor(study);
     els.transcriptWords.disabled = vocabulary.matched.size === 0;
@@ -982,14 +1099,18 @@
     els.transcriptWords.textContent = `My words · ${vocabulary.matched.size}`;
     els.transcriptWords.setAttribute('aria-pressed', String(state.transcriptWordsOnly));
     els.transcriptVocabularyHint.textContent = vocabulary.matched.size ? 'Tap a marked word' : 'Your saved words appear here';
-    els.transcriptList.innerHTML = cues.map((cue, index) => `<article class="transcript-cue${index === state.transcriptSelectedIndex ? ' selected' : ''}${index === state.transcriptActiveIndex ? ' active' : ''}${index === state.transcriptReadingIndex ? ' reading' : ''}" data-transcript-index="${index}" ${state.transcriptWordsOnly && !vocabulary.cues[index]?.length ? 'hidden' : ''} data-language="${escapeHtml(state.transcriptLanguage)}">
+    els.transcriptList.innerHTML = cues.map((cue, index) => `<article class="transcript-cue${index === state.transcriptMarkerIndex ? ' active' : ''}" data-transcript-index="${index}" ${index === state.transcriptMarkerIndex ? 'aria-current="true"' : ''} ${state.transcriptWordsOnly && !vocabulary.cues[index]?.length ? 'hidden' : ''} data-language="${escapeHtml(state.transcriptLanguage)}">
       <div class="transcript-cue-main" data-transcript-tap="${index}"><button class="transcript-time" type="button" data-transcript-select="${index}" aria-pressed="${index === state.transcriptSelectedIndex}" aria-label="Select subtitle ${index + 1} at ${escapeHtml(formatClipTime(cue.start))}. Tap again to play.">${escapeHtml(formatClipTime(cue.start))}</button><span class="transcript-cue-copy"><strong lang="en">${highlightedSubtitle(cue.en, vocabulary.cues[index], index)}</strong><small lang="es">${escapeHtml(cue.es)}</small></span></div>
       <span class="transcript-cue-tools"><button type="button" data-transcript-speak="${index}" aria-label="Speak subtitle ${index + 1}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button><button type="button" data-transcript-clip="${index}" aria-label="Play linked video for subtitle ${index + 1}" ${media ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg></button></span>
     </article>`).join('');
     els.transcriptLanguages.forEach(button => button.classList.toggle('active', button.dataset.transcriptLanguage === state.transcriptLanguage));
     els.transcriptSpeed.value = String(state.transcriptSpeed);
-    els.transcriptFollow.classList.toggle('active', state.transcriptFollow);
-    els.transcriptFollow.setAttribute('aria-pressed', String(state.transcriptFollow));
+    transcriptVisibleRows = [...els.transcriptList.children].filter(row => !row.hidden);
+    els.transcriptNavigator.max = els.transcriptJumpInput.max = String(cues.length);
+    els.transcriptNavigator.disabled = cues.length < 2;
+    setTranscriptBrowseIndex(Math.max(0, state.transcriptMarkerIndex));
+    updateTranscriptFollowButton();
+    scheduleTranscriptViewportUpdate();
     updateTranscriptPosition();
     updateTranscriptSpeechControls();
   }
@@ -1212,11 +1333,63 @@
   els.transcriptRead.addEventListener('click', toggleTranscriptReading);
   els.transcriptStop.addEventListener('click', stopTranscriptSpeech);
   els.transcriptFollow.addEventListener('click', () => {
-    state.transcriptFollow = !state.transcriptFollow;
+    state.transcriptFollow = state.transcriptFollowSuspended || !state.transcriptFollow;
+    state.transcriptFollowSuspended = false;
     savePreference('lingualoop.mobile.transcriptFollow', String(state.transcriptFollow));
-    els.transcriptFollow.classList.toggle('active', state.transcriptFollow);
-    els.transcriptFollow.setAttribute('aria-pressed', String(state.transcriptFollow));
-    if (state.transcriptFollow) scrollTranscriptTo(state.transcriptReadingIndex >= 0 ? state.transcriptReadingIndex : state.transcriptActiveIndex);
+    updateTranscriptFollowButton();
+    if (state.transcriptFollow) {
+      const index = state.transcriptReadingIndex >= 0 ? state.transcriptReadingIndex : state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptMarkerIndex;
+      if (transcriptRow(index)?.hidden) { state.transcriptWordsOnly = false; renderStudyTranscript(); }
+      positionTranscriptViewport(index);
+    } else cancelTranscriptPositioning();
+  });
+  els.transcriptControlsButton.addEventListener('click', () => {
+    state.transcriptControlsPinned = state.transcriptCompact;
+    setTranscriptCompact(!state.transcriptCompact);
+    scheduleTranscriptViewportUpdate();
+  });
+  els.transcriptLastSelection.addEventListener('click', () => browseTranscript(state.transcriptSelectedIndex));
+  els.transcriptNavigator.addEventListener('input', () => browseTranscript(Number(els.transcriptNavigator.value) - 1));
+  els.transcriptNavigator.addEventListener('blur', scheduleTranscriptViewportUpdate);
+  els.transcriptJumpButton.addEventListener('click', () => {
+    const open = els.transcriptJumpForm.hidden;
+    els.transcriptJumpForm.hidden = !open;
+    els.transcriptJumpButton.setAttribute('aria-expanded', String(open));
+    if (open) {
+      els.transcriptJumpInput.value = Math.max(1, state.transcriptBrowseIndex + 1);
+      suspendTranscriptFollow();
+      els.transcriptJumpInput.focus({ preventScroll: true });
+      els.transcriptJumpInput.select();
+    }
+  });
+  els.transcriptJumpForm.addEventListener('submit', event => {
+    event.preventDefault();
+    const index = Number(els.transcriptJumpInput.value) - 1;
+    if (!Number.isInteger(index) || !activeTranscript()[index]) return;
+    closeTranscriptJump();
+    els.transcriptJumpInput.blur();
+    browseTranscript(index);
+  });
+  els.transcriptJumpCancel.addEventListener('click', () => { closeTranscriptJump(); els.transcriptJumpButton.focus({ preventScroll: true }); });
+  els.transcriptJumpForm.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { closeTranscriptJump(); els.transcriptJumpButton.focus({ preventScroll: true }); }
+  });
+  addEventListener('scroll', scheduleTranscriptViewportUpdate, { passive: true });
+  addEventListener('resize', scheduleTranscriptViewportUpdate, { passive: true });
+  window.visualViewport?.addEventListener('resize', scheduleTranscriptViewportUpdate, { passive: true });
+  addEventListener('wheel', event => {
+    if (!els.transcriptDock.contains(event.target) && !els.wordSheet.open && event.deltaY) suspendTranscriptFollow();
+  }, { passive: true });
+  let transcriptTouchY = null;
+  addEventListener('touchstart', event => {
+    transcriptTouchY = state.view === 'video' && !els.transcriptDock.contains(event.target) && !els.wordSheet.open ? event.touches[0]?.clientY : null;
+  }, { passive: true });
+  addEventListener('touchmove', event => {
+    if (transcriptTouchY !== null && Math.abs((event.touches[0]?.clientY ?? transcriptTouchY) - transcriptTouchY) > 8) suspendTranscriptFollow();
+  }, { passive: true });
+  addEventListener('touchend', () => { transcriptTouchY = null; }, { passive: true });
+  addEventListener('keydown', event => {
+    if (!event.target.closest('input, select, textarea, button, dialog') && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) suspendTranscriptFollow();
   });
   els.transcriptSpeed.addEventListener('change', () => {
     state.transcriptSpeed = Math.max(.6, Math.min(1.25, Number(els.transcriptSpeed.value) || .9));
