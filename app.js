@@ -18,7 +18,7 @@
     wordSheetCardId: '', wordSheetCueIndex: -1, transcriptWordsOnly: false,
     pendingDeleteStudyId: '', pendingDeleteTimer: null, fullVideoStudyId: '',
     studyVideoGeneration: 0, studyVideoPlayer: null, studyVideoReady: false, studyVideoPlaying: false, studyVideoPoll: null, studyVideoClipEnd: 0,
-    transcriptVideoActionId: 0,
+    transcriptVideoActionId: 0, transcriptSeekTarget: null,
     transcriptSelectedIndex: -1, transcriptActiveIndex: -1, transcriptReadingIndex: -1,
     transcriptStudyId: '',
     transcriptLanguage: readPreference('lingualoop.mobile.transcriptLanguage') || 'both',
@@ -173,7 +173,8 @@
   const dueCards = (study = activeStudy()) => study ? study.cards.filter(card => !card.dueAt || card.dueAt <= Date.now()) : [];
   const allCards = () => state.library.studies.flatMap(study => study.cards.map(card => ({ ...card, studyId: study.id })));
 
-  function showView(view) {
+  function showView(view, { transcriptIndex = -1 } = {}) {
+    cancelTranscriptPositioning();
     if (els.wordSheet.open) els.wordSheet.close();
     if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
     if (state.view === 'practice' && view !== 'practice') closeCardClip();
@@ -183,8 +184,16 @@
     $$('.view').forEach(section => section.classList.toggle('active', section.dataset.view === view));
     $$('.bottom-nav [data-view-target]').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === view));
     if (view === 'video') {
+      const explicitCue = activeTranscript()[transcriptIndex];
+      if (explicitCue) {
+        rememberStudyPlayback({ time: explicitCue.start, selectedIndex: transcriptIndex });
+        state.transcriptSelectedIndex = state.transcriptActiveIndex = transcriptIndex;
+      }
       renderStudyVideo();
-      requestAnimationFrame(restoreTranscriptViewport);
+      if (explicitCue) {
+        selectTranscriptCue(transcriptIndex, 'select');
+        positionTranscriptViewport(transcriptIndex);
+      } else restoreTranscriptViewport();
     } else scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -392,22 +401,16 @@
 
   function returnFromPractice() {
     const view = state.practiceReturn;
-    showView(view);
-    if (view === 'video' && activeTranscript()[state.wordSheetCueIndex]) {
-      const index = state.wordSheetCueIndex;
-      selectTranscriptCue(index, 'select');
-      requestAnimationFrame(() => transcriptRow(index)?.scrollIntoView({ block: 'center', behavior: 'auto' }));
-    }
+    showView(view, { transcriptIndex: view === 'video' ? state.wordSheetCueIndex : -1 });
   }
 
   function findCardInTranscript() {
     const card = currentCard();
-    const index = learning.indexFor(activeStudy()).byCard.get(card?.id)?.[0];
+    const context = learning.contextFor(activeStudy(), card, state.wordSheetCueIndex);
+    const index = context?.index >= 0 ? context.index : learning.indexFor(activeStudy()).byCard.get(card?.id)?.[0];
     if (!Number.isInteger(index)) return;
     state.transcriptWordsOnly = false;
-    showView('video');
-    selectTranscriptCue(index, 'select');
-    requestAnimationFrame(() => transcriptRow(index)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    showView('video', { transcriptIndex: index });
   }
 
   function stopSpeech() {
@@ -538,6 +541,7 @@
     state.studyVideoPlaying = false;
     state.studyVideoLoadPromise = null;
     state.studyVideoClipEnd = 0;
+    state.transcriptSeekTarget = null;
     state.fullVideoStudyId = '';
     recreateStudyVideoHost();
   }
@@ -562,6 +566,7 @@
   }
 
   function currentStudyVideoTime() {
+    if (state.transcriptSeekTarget !== null) return state.transcriptSeekTarget;
     if (state.studyVideoReady && state.studyVideoPlayer?.getCurrentTime) {
       try {
         const time = Number(state.studyVideoPlayer.getCurrentTime());
@@ -697,10 +702,44 @@
     if (row && !row.hidden) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
+  let transcriptPositionFrame = 0;
+  let transcriptPositionCleanup = () => {};
+  function cancelTranscriptPositioning() {
+    cancelAnimationFrame(transcriptPositionFrame);
+    transcriptPositionFrame = 0;
+    transcriptPositionCleanup();
+    transcriptPositionCleanup = () => {};
+  }
+
+  function positionTranscriptViewport(index) {
+    cancelTranscriptPositioning();
+    const studyId = activeStudy()?.id;
+    let frames = 0;
+    const events = ['pointerdown', 'touchstart', 'wheel', 'keydown'];
+    events.forEach(type => window.addEventListener(type, cancelTranscriptPositioning, { passive: true, once: true }));
+    transcriptPositionCleanup = () => events.forEach(type => window.removeEventListener(type, cancelTranscriptPositioning));
+    const align = () => {
+      const row = transcriptRow(index);
+      if (state.view !== 'video' || activeStudy()?.id !== studyId || !row || row.hidden) { cancelTranscriptPositioning(); return; }
+      const rect = row.getBoundingClientRect();
+      const top = window.visualViewport?.offsetTop || 0;
+      const bottom = Math.min(top + (window.visualViewport?.height || innerHeight), $('.bottom-nav').getBoundingClientRect().top);
+      const height = Math.max(100, bottom - top - 24);
+      const delta = rect.top + Math.min(rect.height, height) / 2 - (top + bottom) / 2;
+      // Jump directly: smooth scrolling measures lazy-rendered rows before their
+      // real heights are known. Re-align briefly as layout/keyboard settles.
+      if (Math.abs(delta) > 1) scrollTo({ top: Math.max(0, scrollY + delta), behavior: 'instant' });
+      if (++frames < 30) transcriptPositionFrame = requestAnimationFrame(align);
+      else cancelTranscriptPositioning();
+    };
+    transcriptPositionFrame = requestAnimationFrame(align);
+  }
+
   function restoreTranscriptViewport() {
+    if (state.view !== 'video') return;
     const index = state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
     if (index < 0) { scrollTo({ top: 0, behavior: 'auto' }); return; }
-    transcriptRow(index)?.scrollIntoView({ behavior: 'auto', block: 'center' });
+    positionTranscriptViewport(index);
   }
 
   function updateTranscriptPosition() {
@@ -718,7 +757,7 @@
       : `${cues.length} subtitles · choose a line`;
   }
 
-  function setTranscriptMarker(kind, index) {
+  function setTranscriptMarker(kind, index, { scroll = true } = {}) {
     const property = kind === 'active' ? 'transcriptActiveIndex' : kind === 'reading' ? 'transcriptReadingIndex' : 'transcriptSelectedIndex';
     const previous = state[property];
     if (previous === index) { updateTranscriptPosition(); return; }
@@ -729,7 +768,7 @@
     if (kind === 'selected') transcriptRow(index)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
     if (kind === 'selected' && index >= 0) rememberStudyPlayback({ time: activeTranscript()[index]?.start, selectedIndex: index });
     updateTranscriptPosition();
-    if ((kind === 'active' || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
+    if (scroll && ((kind === 'active' && state.studyVideoPlaying) || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
   }
 
   function updateStudyVideoTime() {
@@ -737,6 +776,11 @@
     if (!state.studyVideoReady || !player?.getCurrentTime) return;
     let time = 0;
     try { time = Number(player.getCurrentTime()) || 0; } catch { return; }
+    if (state.transcriptSeekTarget !== null) {
+      // A pause notification can still report the position before seekTo.
+      if (!state.studyVideoPlaying && Math.abs(time - state.transcriptSeekTarget) > .3) return;
+      state.transcriptSeekTarget = null;
+    }
     setTranscriptMarker('active', transcriptCueIndexAt(time));
     rememberStudyPlayback({ time, selectedIndex: state.transcriptSelectedIndex });
     if (state.studyVideoClipEnd && time >= state.studyVideoClipEnd - .04) {
@@ -755,6 +799,7 @@
     const shouldPlay = mode === 'continuous' || mode === 'clip';
     stopTranscriptSpeech();
     setTranscriptMarker('selected', index);
+    setTranscriptMarker('active', index, { scroll: false });
     rememberStudyPlayback({ time: range.start, selectedIndex: index, persist: true });
     const study = activeStudy();
     if (!normalizeYouTubeMedia(study?.media)) {
@@ -765,6 +810,7 @@
     if (shouldPlay && !state.videoExpanded) { state.videoExpanded = true; renderStudyVideo(); }
     if (!shouldPlay && !state.videoExpanded && !state.studyVideoPlayer) return;
     const pendingPlayer = loadStudyVideo(false);
+    state.transcriptSeekTarget = range.start;
     actionId = state.transcriptVideoActionId;
     const player = await pendingPlayer;
     if (actionId !== state.transcriptVideoActionId) return;

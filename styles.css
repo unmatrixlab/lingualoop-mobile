@@ -334,6 +334,7 @@ h1 { font-size: clamp(30px, 9vw, 46px); letter-spacing: -.04em; margin-bottom: 1
 .transcript-focus button:disabled { opacity: .45; }
 .transcript-list { padding: 5px; gap: 2px; }
 .transcript-cue { border-radius: 12px; min-height: 70px; scroll-margin-block: 110px; }
+.transcript-cue.selected { content-visibility: visible; }
 .transcript-cue-main { padding: 10px 5px 11px 9px; grid-template-columns: 1fr; gap: 4px; cursor: pointer; }
 .transcript-time { justify-self: start; border: none; background: transparent; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; padding: 0 4px 2px 0; min-height: 26px; }
 .transcript-cue-copy strong { font-size: 16px; font-weight: 650; line-height: 1.6; overflow-wrap: anywhere; }
