@@ -9,14 +9,18 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 ## Current scope
 
 - Daily due queue
-- Recall cards with four review ratings
-- Written recall
+- Recall cards with four review ratings and growing review intervals
+- Written English recall inside the original study sentence
+- Difficult words return later in the same session (up to two additional attempts)
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
-- Full-video comprehension with active-subtitle following, direct seeking and linked clip playback
+- Full-video comprehension with active-subtitle following, direct seeking and individual subtitle clips; desktop chains do not affect phone playback
+- Saved words and phrases highlighted throughout the English transcript using their vocabulary colors
+- Tap a marked word for its saved meaning, pronunciation and contextual practice; return to the same passage
+- Read-only view, English/Spanish/both display and a filter for lines containing saved words
 - Multiple studies stored locally
 - Full-row study switching and protected on-device deletion
-- Offline PWA support
+- Offline reading and vocabulary practice after the app is installed; YouTube still requires a connection and device voices depend on the phone
 - Private same-Wi-Fi QR and clipboard transfer from LinguaLoop 3
 - Compressed `#packz=` payload import with legacy `#pack=` compatibility
 
@@ -25,6 +29,8 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 LinguaLoop 3 creates a short-lived local QR route. Scanning it in the iPhone Camera opens a local handoff page in Safari. The user copies the compressed transfer, returns to the installed Home Screen app and taps **Paste study**. This explicit handoff is required because iOS keeps Safari storage separate from an installed Home Screen web app. GitHub Pages never receives the vocabulary; the transfer stays between the computer, clipboard and installed app.
 
 Direct `#packz=` URL import remains supported for browsers and platforms that keep the web app in the same storage context.
+
+Sending an updated study replaces its content while preserving the review progress and playback position already stored on this phone. The phone remains a separate practice history; progress does not sync back to the computer. Optional `colorIndex` preserves an explicitly chosen desktop vocabulary color. Older packs remain compatible and receive stable default colors.
 
 The decoded study pack uses this structure:
 
@@ -53,6 +59,7 @@ The decoded study pack uses this structure:
       "english": "Target phrase",
       "spanish": "Translation",
       "context": "Optional context",
+      "colorIndex": 4,
       "clip": { "start": 42.2, "end": 47.8 },
       "level": 0,
       "dueAt": 0,

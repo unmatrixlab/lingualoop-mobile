@@ -9,7 +9,7 @@
   <title>LinguaLoop Mobile</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <div class="app-shell">
@@ -32,11 +32,11 @@
         <section class="hero-card">
           <div>
             <p class="hero-kicker">READY TO REVIEW</p>
-            <h1 id="todayTitle"><span id="dueCount">0</span> words<br>for today</h1>
+            <h1 id="todayTitle"><span id="dueCount">0</span> <span id="dueUnit">words</span> ready</h1>
             <p id="todayMessage">A short session keeps every word within reach.</p>
           </div>
           <div class="progress-orbit" id="progressOrbit" style="--progress:0%">
-            <div><strong id="retentionValue">0%</strong><span>retention</span></div>
+            <div><strong id="retentionValue">0%</strong><span>recall accuracy</span></div>
           </div>
           <button class="primary-action" id="startReviewButton" type="button">
             <span>Start review</span>
@@ -61,7 +61,7 @@
           </button>
           <button class="mode-card" type="button" data-practice-mode="write">
             <span class="mode-icon write-icon">Aa</span>
-            <span><strong>Write</strong><small>Type what you remember</small></span>
+            <span><strong>Write</strong><small>Complete the English phrase</small></span>
             <em id="writeCount">0</em>
           </button>
         </div>
@@ -79,15 +79,15 @@
 
       <section class="view" data-view="practice" aria-labelledby="practiceTitle">
         <header class="view-header">
-          <button class="icon-button" type="button" data-view-target="today" aria-label="Return to Today">←</button>
+          <button class="icon-button" id="practiceBackButton" type="button" aria-label="Leave practice">←</button>
           <div><span class="eyebrow" id="practiceModeLabel">CARDS</span><h1 id="practiceTitle">Daily review</h1></div>
           <span class="session-count" id="practiceProgress">0 / 0</span>
         </header>
         <div class="session-track"><i id="sessionTrackFill"></i></div>
 
         <section class="practice-empty" id="practiceEmpty" hidden>
-          <span>✓</span><h2>All caught up</h2><p>There are no words due in this study.</p>
-          <button class="secondary-action" type="button" data-view-target="today">Back to Today</button>
+          <span>✓</span><h2>Session complete</h2><p id="practiceSummary">Your progress is saved.</p>
+          <button class="primary-action full-width" id="practiceDoneButton" type="button">Back to Today</button>
         </section>
 
         <section class="practice-stage" id="practiceStage">
@@ -109,7 +109,7 @@
           <article class="recall-card" id="recallCard">
             <span class="card-label">REMEMBER THIS</span>
             <h2 id="promptText">Ready?</h2>
-            <p id="promptContext"></p>
+            <p id="promptContext"></p><button class="text-button context-link" id="cardContextButton" type="button" hidden>Find in transcript ↗</button>
             <div class="answer-area" id="answerArea" hidden>
               <div class="answer-heading"><span>ANSWER</span><button class="practice-tool-button listen" id="answerSpeakButton" type="button" aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Spanish</span></button></div>
               <strong id="answerText"></strong><p id="answerContext"></p>
@@ -117,14 +117,14 @@
           </article>
 
           <form class="write-form" id="writeForm" hidden>
-            <label for="writeAnswer">Your answer</label>
-            <div><input id="writeAnswer" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
+            <label for="writeAnswer">Your English</label>
+            <div><input id="writeAnswer" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
             <p id="writeFeedback" role="status"></p>
           </form>
 
           <button class="primary-action reveal-button" id="revealButton" type="button">Reveal answer</button>
           <div class="rating-row" id="ratingRow" hidden>
-            <button type="button" data-rating="again"><span>Again</span><small>&lt; 1 min</small></button>
+            <button type="button" data-rating="again"><span>Again</span><small>In this session</small></button>
             <button type="button" data-rating="hard"><span>Hard</span><small>1 day</small></button>
             <button type="button" data-rating="good"><span>Good</span><small>3 days</small></button>
             <button type="button" data-rating="easy"><span>Easy</span><small>7 days</small></button>
@@ -133,12 +133,12 @@
       </section>
 
       <section class="view" data-view="video" aria-label="Video and transcript">
-        <div class="eyebrow-row"><span class="eyebrow">VIDEO + TRANSCRIPT</span><span id="studyTranscriptSummary">FULL STUDY</span></div>
+        <div class="eyebrow-row"><button id="toggleStudyVideo" type="button" class="text-button" aria-expanded="true" aria-controls="studyVideoReady">Hide video</button><span id="studyTranscriptSummary">FULL STUDY</span></div>
         <div class="study-video-workspace">
         <section class="study-video-card" id="studyVideoReady" hidden>
           <div class="study-video-frame"><div id="studyVideoFrame" aria-label="Complete YouTube study video"></div></div>
           <div class="study-video-info"><div><span>NOW WATCHING</span><strong id="studyVideoTitle">Study video</strong><small id="studyVideoMeta"></small></div><button class="secondary-action" id="restartStudyVideoButton" type="button">Start over</button></div>
-          <p class="comprehension-note"><span aria-hidden="true">◎</span><span>Play normally and the transcript follows. Select a line to move the video, or use its clip button for that exact passage.</span></p>
+
         </section>
         <section class="video-empty" id="studyVideoEmpty">
           <span aria-hidden="true">▶</span><h2>No YouTube video in this study</h2><p>The imported transcript can still be read and spoken. Video-linked playback appears for YouTube studies.</p>
@@ -146,7 +146,7 @@
         </section>
         <section class="transcript-panel" id="studyTranscriptPanel" hidden aria-labelledby="studyTranscriptTitle">
           <header class="transcript-header">
-            <div><span class="eyebrow">COMPLETE TRANSCRIPT</span><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></div>
+            <div><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></div>
             <button class="transcript-follow-button active" id="studyTranscriptFollowButton" type="button" aria-pressed="true"><i></i><span>Follow</span></button>
           </header>
           <div class="transcript-reader">
@@ -159,6 +159,7 @@
             <button class="transcript-read-button" id="studyTranscriptReadButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Read all</span></button>
             <button class="transcript-stop-button" id="studyTranscriptStopButton" type="button" disabled aria-label="Stop transcript reading">■</button>
           </div>
+          <div class="transcript-focus"><span id="transcriptVocabularyHint">Tap a marked word to study it</span><button type="button" id="transcriptWordsButton" aria-pressed="false">My words</button></div>
           <div class="transcript-list" id="studyTranscriptList"></div>
         </section>
         <section class="video-empty transcript-empty" id="studyTranscriptEmpty">
@@ -220,6 +221,14 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=11"></script>
+  <dialog id="wordSheet" class="word-sheet" aria-labelledby="wordSheetTitle">
+    <header><span>YOUR VOCABULARY</span><button id="wordSheetClose" class="icon-button" type="button" aria-label="Close word">×</button></header>
+    <div class="word-sheet-title"><h2 id="wordSheetTitle"></h2><button id="wordSheetSpeak" class="practice-tool-button listen" type="button" aria-label="Pronounce word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button></div>
+    <p id="wordSheetMeaning" class="word-sheet-meaning"></p>
+    <p id="wordSheetContext" class="word-sheet-context"></p>
+    <button id="wordSheetPractice" class="primary-action full-width" type="button">Practice this word</button>
+  </dialog>
+  <script src="learning.js?v=1"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

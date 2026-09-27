@@ -5,19 +5,25 @@
   const DB_VERSION = 1;
   const STORE_NAME = 'state';
   const STATE_KEY = 'library';
-  const DAY = 86400000;
+  const learning = window.LinguaLoopLearning;
+  function readPreference(key) { try { return localStorage.getItem(key); } catch { return null; } }
+  function savePreference(key, value) { try { localStorage.setItem(key, value); } catch { /* Keep the current session preference. */ } }
+
 
   const state = {
     library: { version: 1, activeStudyId: '', studies: [] },
     view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
+    practiceRun: 0, practiceReturn: 'today', practiceRetries: {}, practiceAnswers: 0, practiceCorrect: 0,
+    videoExpanded: readPreference('lingualoop.mobile.videoExpanded') !== 'false',
+    wordSheetCardId: '', wordSheetCueIndex: -1, transcriptWordsOnly: false,
     pendingDeleteStudyId: '', pendingDeleteTimer: null, fullVideoStudyId: '',
-    studyVideoPlayer: null, studyVideoReady: false, studyVideoPlaying: false, studyVideoPoll: null, studyVideoClipEnd: 0,
+    studyVideoGeneration: 0, studyVideoPlayer: null, studyVideoReady: false, studyVideoPlaying: false, studyVideoPoll: null, studyVideoClipEnd: 0,
     transcriptVideoActionId: 0,
     transcriptSelectedIndex: -1, transcriptActiveIndex: -1, transcriptReadingIndex: -1,
     transcriptStudyId: '',
-    transcriptLanguage: localStorage.getItem('lingualoop.mobile.transcriptLanguage') || 'both',
-    transcriptSpeed: Number(localStorage.getItem('lingualoop.mobile.transcriptSpeed')) || .9,
-    transcriptFollow: localStorage.getItem('lingualoop.mobile.transcriptFollow') !== 'false',
+    transcriptLanguage: readPreference('lingualoop.mobile.transcriptLanguage') || 'both',
+    transcriptSpeed: Number(readPreference('lingualoop.mobile.transcriptSpeed')) || .9,
+    transcriptFollow: readPreference('lingualoop.mobile.transcriptFollow') !== 'false',
     transcriptSpeechActive: false, transcriptSpeechPaused: false, transcriptSpeechRunId: 0,
     transcriptSpeechIndex: -1, transcriptSpeechPart: 0
   };
@@ -25,6 +31,9 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const els = {
+    wordSheet: $('#wordSheet'), wordSheetTitle: $('#wordSheetTitle'), wordSheetMeaning: $('#wordSheetMeaning'), wordSheetContext: $('#wordSheetContext'), wordSheetSpeak: $('#wordSheetSpeak'), wordSheetPractice: $('#wordSheetPractice'),
+    toggleVideo: $('#toggleStudyVideo'), cardContext: $('#cardContextButton'), practiceSummary: $('#practiceSummary'), practiceDone: $('#practiceDoneButton'),
+    transcriptWords: $('#transcriptWordsButton'), transcriptVocabularyHint: $('#transcriptVocabularyHint'),
     dueCount: $('#dueCount'), todayDate: $('#todayDate'), todayMessage: $('#todayMessage'), retentionValue: $('#retentionValue'), progressOrbit: $('#progressOrbit'),
     statDue: $('#statDue'), statLearning: $('#statLearning'), statStrong: $('#statStrong'), cardsCount: $('#cardsCount'), writeCount: $('#writeCount'),
     activeStudyTitle: $('#activeStudyTitle'), activeStudySummary: $('#activeStudySummary'), studyCount: $('#studyCount'), studyList: $('#studyList'),
@@ -54,7 +63,7 @@
 
   function normalizeTranscript(value) {
     const source = Array.isArray(value) ? value : Array.isArray(value?.cues) ? value.cues : [];
-    return source.slice(0, 12000).map((cue, index) => {
+    return source.slice(0, 24000).map((cue, index) => {
       const start = Number(cue?.start);
       const end = Number(cue?.end);
       const english = String(cue?.en || '').trim();
@@ -63,7 +72,7 @@
       return {
         id: String(cue?.id || `subtitle-${index + 1}`).slice(0, 120),
         start: Math.max(0, start), end: Math.max(start + .05, end),
-        en: english.slice(0, 1800), es: spanish.slice(0, 1800),
+        en: english.slice(0, 2400), es: spanish.slice(0, 2400),
         chain: Math.max(0, Math.round(Number(cue?.chain) || 0))
       };
     }).filter(Boolean).sort((left, right) => left.start - right.start || left.end - right.end);
@@ -93,28 +102,46 @@
   async function loadLibrary() {
     try {
       const db = await openDb();
-      state.library = await new Promise((resolve, reject) => {
-        const request = db.transaction(STORE_NAME).objectStore(STORE_NAME).get(STATE_KEY);
-        request.onsuccess = () => resolve(request.result || state.library);
-        request.onerror = () => reject(request.error);
-      });
-      db.close();
-    } catch {
-      try { state.library = JSON.parse(localStorage.getItem(DB_NAME)) || state.library; } catch { /* keep empty */ }
-    }
+      try {
+        state.library = await new Promise((resolve, reject) => {
+          const request = db.transaction(STORE_NAME).objectStore(STORE_NAME).get(STATE_KEY);
+          request.onsuccess = () => resolve(request.result || state.library);
+          request.onerror = () => reject(request.error);
+        });
+      } finally { db.close(); }
+    } catch { /* Recover the most recent fallback below, even when IndexedDB returns. */ }
+    let recovered = false;
+    try {
+      const fallback = JSON.parse(localStorage.getItem(DB_NAME));
+      if (fallback && Array.isArray(fallback.studies)) { state.library = fallback; recovered = true; }
+    } catch { /* The durable library is still available. */ }
     const migrated = normalizeLibrary();
-    if (migrated) await saveLibrary();
+    if (migrated || recovered) await saveLibrary();
   }
 
-  async function saveLibrary() {
-    try {
-      const db = await openDb();
-      await new Promise((resolve, reject) => {
-        const request = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(state.library, STATE_KEY);
-        request.onsuccess = () => resolve(); request.onerror = () => reject(request.error);
-      });
-      db.close();
-    } catch { localStorage.setItem(DB_NAME, JSON.stringify(state.library)); }
+  let librarySaveQueue = Promise.resolve();
+  function saveLibrary() {
+    const snapshot = JSON.parse(JSON.stringify(state.library));
+    // Serialize rapid ratings, imports and position saves in the order requested.
+    librarySaveQueue = librarySaveQueue.then(async () => {
+      try {
+        const db = await openDb();
+        try {
+          await new Promise((resolve, reject) => {
+            const transaction = db.transaction(STORE_NAME, 'readwrite');
+            transaction.objectStore(STORE_NAME).put(snapshot, STATE_KEY);
+            transaction.oncomplete = resolve;
+            transaction.onabort = transaction.onerror = () => reject(transaction.error || new Error('Storage unavailable'));
+          });
+        } finally { db.close(); }
+        try { localStorage.removeItem(DB_NAME); } catch { /* IndexedDB has committed. */ }
+        return true;
+      } catch {
+        try { localStorage.setItem(DB_NAME, JSON.stringify(snapshot)); return true; }
+        catch { showToast('Storage is full. Keep this page open; your latest progress is not saved yet.'); return false; }
+      }
+    });
+    return librarySaveQueue;
   }
 
   function normalizeLibrary() {
@@ -134,7 +161,7 @@
       study.cards = Array.isArray(study.cards) ? study.cards : [];
       study.cards.forEach((card, index) => Object.assign(card, {
         id: card.id || `${study.id}-${index}`, english: String(card.english || ''), spanish: String(card.spanish || ''), context: String(card.context || ''),
-        clip: normalizeClip(card.clip),
+        clip: normalizeClip(card.clip), colorIndex: learning.colorIndex(card),
         level: Number(card.level) || 0, dueAt: Number(card.dueAt) || 0, reviews: Number(card.reviews) || 0, correct: Number(card.correct) || 0
       }));
     });
@@ -147,6 +174,7 @@
   const allCards = () => state.library.studies.flatMap(study => study.cards.map(card => ({ ...card, studyId: study.id })));
 
   function showView(view) {
+    if (els.wordSheet.open) els.wordSheet.close();
     if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
     if (state.view === 'practice' && view !== 'practice') closeCardClip();
     if (state.view === 'video' && view !== 'video') { captureStudyVideoPosition(true); pauseStudyVideo(); stopTranscriptSpeech(); }
@@ -170,11 +198,12 @@
     const retention = totalReviews ? Math.round(correct / totalReviews * 100) : 0;
     els.todayDate.textContent = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date()).toUpperCase();
     els.dueCount.textContent = due.length;
-    els.todayMessage.textContent = due.length ? 'A short session keeps every word within reach.' : study ? 'You are caught up. Practice anything when you feel ready.' : 'Connect a study from LinguaLoop 3 to begin.';
-    els.retentionValue.textContent = `${retention}%`;
+    $('#dueUnit').textContent = due.length === 1 ? 'word' : 'words';
+    els.todayMessage.textContent = due.length ? `${study?.name || 'Your study'} · recall, then return to the story.` : study ? 'You are caught up. Practice anything when you feel ready.' : 'Connect a study from LinguaLoop 3 to begin.';
+    els.retentionValue.textContent = totalReviews ? `${retention}%` : '—';
     els.progressOrbit.style.setProperty('--progress', `${retention}%`);
     els.statDue.textContent = due.length;
-    els.statLearning.textContent = cards.filter(card => card.level > 0 && card.level < 4).length;
+    els.statLearning.textContent = cards.filter(card => card.level < 4).length;
     els.statStrong.textContent = cards.filter(card => card.level >= 4).length;
     els.cardsCount.textContent = cards.length;
     els.writeCount.textContent = cards.length;
@@ -229,90 +258,156 @@
       return;
     }
     clearPendingStudyDelete();
+    const previousLibrary = JSON.parse(JSON.stringify(state.library));
+    captureStudyVideoPosition(false); stopSpeech(); destroyStudyVideo();
     state.library.studies = state.library.studies.filter(item => item.id !== studyId);
     if (state.library.activeStudyId === studyId) state.library.activeStudyId = state.library.studies[0]?.id || '';
-    state.queue = [];
-    state.index = 0;
-    await saveLibrary();
+    resetPractice();
+    if (!await saveLibrary()) { state.library = previousLibrary; render(); return; }
     render();
     if (state.view === 'video') renderStudyVideo();
     showToast(`${study.name} removed from this phone`);
     if (!state.library.studies.length) showView('connect');
   }
 
-  function startPractice(mode = 'cards') {
-    closeCardClip();
-    stopSpeech();
-    state.practiceMode = mode;
-    const study = activeStudy();
-    const due = dueCards(study);
-    state.queue = (due.length ? due : study?.cards || []).map(card => card.id).sort(() => Math.random() - .5);
-    state.index = 0; state.revealed = false;
-    els.practiceModeLabel.textContent = mode === 'write' ? 'WRITE' : 'CARDS';
-    els.writeForm.hidden = mode !== 'write';
+  function resetPractice() {
+    state.practiceRun += 1;
+    state.queue = []; state.index = 0; state.practiceRetries = {};
+    state.practiceReturn = 'today';
+  }
+
+  function startPractice(mode = 'cards', { cardIds = null, returnTo = 'today' } = {}) {
+    closeCardClip(); stopSpeech();
+    state.practiceRun += 1;
+    state.practiceMode = mode === 'write' ? 'write' : 'cards';
+    const study = activeStudy(), due = dueCards(study);
+    const cards = cardIds ? (study?.cards || []).filter(card => cardIds.includes(card.id)) : due.length ? due : study?.cards || [];
+    state.queue = learning.shuffled(cards.map(card => card.id));
+    state.index = 0; state.revealed = false; state.practiceRetries = {};
+    state.practiceAnswers = 0; state.practiceCorrect = 0; state.practiceReturn = returnTo;
+    els.practiceModeLabel.textContent = state.practiceMode === 'write' ? 'WRITE IN ENGLISH' : 'CARDS';
+    $('#practiceTitle').textContent = cardIds ? 'Practice this word' : 'Daily review';
     renderPracticeCard();
-    state.view = 'practice';
+    // showView owns navigation, so it can pause/capture the video first.
   }
 
   function currentCard() {
-    const study = activeStudy();
-    return study?.cards.find(card => card.id === state.queue[state.index]) || null;
+    return activeStudy()?.cards.find(card => card.id === state.queue[state.index]) || null;
   }
 
   function renderPracticeCard() {
-    const card = currentCard();
-    const total = state.queue.length;
-    els.practiceEmpty.hidden = Boolean(card);
-    els.practiceStage.hidden = !card;
+    const card = currentCard(), total = state.queue.length;
+    els.practiceEmpty.hidden = Boolean(card); els.practiceStage.hidden = !card;
     els.practiceProgress.textContent = `${Math.min(state.index + 1, total)} / ${total}`;
     els.sessionTrackFill.style.width = total ? `${state.index / total * 100}%` : '100%';
-    if (!card) { closeCardClip(); return; }
-    closeCardClip();
-    stopSpeech();
-    state.revealed = false;
-    els.promptDirection.textContent = 'ENGLISH → SPANISH';
-    els.promptText.textContent = card.english;
-    els.promptContext.textContent = card.context;
-    els.answerText.textContent = card.spanish;
-    els.answerContext.textContent = card.context;
-    els.answerArea.hidden = true;
-    els.reveal.hidden = state.practiceMode === 'write';
-    els.ratingRow.hidden = true;
-    els.writeForm.hidden = state.practiceMode !== 'write';
-    els.writeAnswer.value = '';
-    els.writeFeedback.textContent = '';
-    els.writeFeedback.className = '';
-    const clip = currentCardClip();
-    els.clipButton.hidden = !clip;
-    els.clipButton.setAttribute('aria-pressed', 'false');
-    if (clip) els.clipTitle.textContent = `${activeStudy()?.name || 'Current study'} · ${formatClipTime(clip.start)}–${formatClipTime(clip.end)}`;
-    if (state.practiceMode === 'write') setTimeout(() => els.writeAnswer.focus(), 100);
+    if (!card) {
+      closeCardClip();
+      els.practiceEmpty.querySelector('h2').textContent = state.practiceAnswers ? 'Session complete' : 'No words to review';
+      els.practiceSummary.textContent = state.practiceAnswers
+        ? `${state.practiceCorrect} of ${state.practiceAnswers} recalled · progress saved.`
+        : 'Choose a study with vocabulary to start.';
+      els.practiceDone.textContent = state.practiceReturn === 'video' ? 'Back to the transcript' : 'Back to Today';
+      return;
+    }
+    closeCardClip(); stopSpeech(); state.revealed = false;
+    const writing = state.practiceMode === 'write';
+    els.practiceStage.classList.toggle('writing', writing);
+    const context = learning.contextFor(activeStudy(), card, state.wordSheetCueIndex);
+    els.promptDirection.textContent = writing ? (context ? 'COMPLETE THE ENGLISH' : 'SPANISH → ENGLISH') : 'ENGLISH → SPANISH';
+    els.promptText.textContent = writing ? (context?.masked || card.spanish) : card.english;
+    els.promptText.classList.toggle('sentence-prompt', writing && Boolean(context));
+    els.promptContext.textContent = writing ? (context ? card.spanish : '') : (context?.text || card.context);
+    els.answerText.textContent = writing ? card.english : card.spanish;
+    els.answerContext.textContent = writing ? (context?.text || '') : '';
+    els.answerSpeak.querySelector('span').textContent = writing ? 'English' : 'Spanish';
+    els.answerSpeak.setAttribute('aria-label', writing ? 'Pronounce the English answer' : 'Pronounce the Spanish answer');
+    els.cardContext.hidden = !(learning.indexFor(activeStudy()).byCard.get(card.id)?.length);
+    els.answerArea.hidden = true; els.reveal.hidden = false; els.ratingRow.hidden = true;
+    els.reveal.textContent = writing ? 'Show answer' : 'Reveal answer';
+    els.writeForm.hidden = !writing; els.writeAnswer.value = '';
+    els.writeAnswer.disabled = false; els.writeForm.querySelector('button').disabled = false;
+    els.writeFeedback.textContent = ''; els.writeFeedback.className = '';
+    els.clipButton.hidden = true;
+    // Avoid opening the phone keyboard before the learner has read the sentence.
   }
 
   function revealAnswer() {
     if (!currentCard()) return;
-    state.revealed = true;
-    els.answerArea.hidden = false;
-    els.reveal.hidden = true;
-    els.ratingRow.hidden = false;
+    state.revealed = true; els.answerArea.hidden = false;
+    els.reveal.hidden = true; els.ratingRow.hidden = false;
+    if (state.practiceMode === 'write') {
+      els.writeAnswer.blur();
+      els.writeAnswer.disabled = true; els.writeForm.querySelector('button').disabled = true;
+    }
+    const card = currentCard();
+    for (const rating of ['hard', 'good', 'easy']) {
+      const days = learning.reviewSchedule(card, rating).days;
+      els.ratingRow.querySelector(`[data-rating="${rating}"] small`).textContent = `${days} ${days === 1 ? 'day' : 'days'}`;
+    }
+    els.ratingRow.querySelector('[data-rating="again"] small').textContent = (state.practiceRetries[card.id] || 0) < 2 ? 'In this session' : 'In 1 minute';
   }
 
   async function rateCard(rating) {
-    const card = currentCard(); if (!card) return;
-    const schedule = { again: [0, 60000], hard: [1, DAY], good: [3, DAY * 3], easy: [5, DAY * 7] }[rating] || [1, DAY];
-    card.level = rating === 'again' ? Math.max(0, card.level - 1) : Math.max(card.level, schedule[0]);
-    card.dueAt = Date.now() + schedule[1]; card.reviews += 1; card.correct += rating === 'again' ? 0 : 1; card.lastRating = rating;
-    await saveLibrary();
-    state.index += 1; renderPracticeCard(); render();
-    if (state.index >= state.queue.length) showToast('Session complete');
+    const card = currentCard();
+    if (!card || !state.revealed || state.ratingPending || !['again','hard','good','easy'].includes(rating)) return;
+    const run = state.practiceRun;
+    state.ratingPending = true;
+    const previous = { ...card }, buttons = [...els.ratingRow.querySelectorAll('button')];
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+      const schedule = learning.reviewSchedule(card, rating);
+      card.level = schedule.level;
+      card.dueAt = Date.now() + schedule.delay; card.reviews += 1; card.correct += rating === 'again' ? 0 : 1; card.lastRating = rating;
+      if (!await saveLibrary()) { Object.assign(card, previous); return; }
+      if (run !== state.practiceRun) return;
+      state.practiceAnswers += 1; state.practiceCorrect += rating === 'again' ? 0 : 1;
+      if (rating === 'again' && (state.practiceRetries[card.id] || 0) < 2) {
+        state.practiceRetries[card.id] = (state.practiceRetries[card.id] || 0) + 1;
+        state.queue.splice(Math.min(state.queue.length, state.index + 3), 0, card.id);
+      }
+      state.index += 1; renderPracticeCard(); render();
+    } finally {
+      state.ratingPending = false; buttons.forEach(button => { button.disabled = false; });
+    }
   }
 
-  function normalizeAnswer(value) { return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim(); }
   function checkWrittenAnswer(event) {
-    event.preventDefault(); const card = currentCard(); if (!card) return;
-    const correct = normalizeAnswer(els.writeAnswer.value) === normalizeAnswer(card.spanish);
-    els.writeFeedback.textContent = correct ? 'Correct — nicely remembered.' : 'Not quite. Compare your answer below.';
+    event.preventDefault(); const card = currentCard(); if (!card || state.revealed) return;
+    if (!els.writeAnswer.value.trim()) { els.writeFeedback.textContent = 'Try an English word, or tap Show answer.'; return; }
+    const correct = learning.normalizedAnswer(els.writeAnswer.value) === learning.normalizedAnswer(card.english);
+    els.writeFeedback.textContent = correct ? 'Correct — now say the full sentence.' : 'Compare, say it once, then choose Again.';
     els.writeFeedback.className = correct ? 'correct' : 'incorrect'; revealAnswer();
+  }
+
+  function openVocabularyWord(cardId, cueIndex) {
+    const card = activeStudy()?.cards.find(item => item.id === cardId);
+    if (!card) return;
+    captureStudyVideoPosition(true); pauseStudyVideo(); stopSpeech();
+    state.wordSheetCardId = cardId; state.wordSheetCueIndex = cueIndex;
+    els.wordSheet.style.setProperty('--word-color', learning.colors[learning.colorIndex(card)]);
+    els.wordSheetTitle.textContent = card.english; els.wordSheetMeaning.textContent = card.spanish;
+    els.wordSheetContext.textContent = activeTranscript()[cueIndex]?.en || learning.contextFor(activeStudy(), card)?.text || '';
+    if (!els.wordSheet.open) els.wordSheet.showModal();
+  }
+
+  function returnFromPractice() {
+    const view = state.practiceReturn;
+    showView(view);
+    if (view === 'video' && activeTranscript()[state.wordSheetCueIndex]) {
+      const index = state.wordSheetCueIndex;
+      selectTranscriptCue(index, 'select');
+      requestAnimationFrame(() => transcriptRow(index)?.scrollIntoView({ block: 'center', behavior: 'auto' }));
+    }
+  }
+
+  function findCardInTranscript() {
+    const card = currentCard();
+    const index = learning.indexFor(activeStudy()).byCard.get(card?.id)?.[0];
+    if (!Number.isInteger(index)) return;
+    state.transcriptWordsOnly = false;
+    showView('video');
+    selectTranscriptCue(index, 'select');
+    requestAnimationFrame(() => transcriptRow(index)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   }
 
   function stopSpeech() {
@@ -345,7 +440,7 @@
 
   function speakCurrentAnswer() {
     const card = currentCard();
-    if (card) speakText(card.spanish, 'es-US', els.answerSpeak);
+    if (card) speakText(state.practiceMode === 'write' ? card.english : card.spanish, state.practiceMode === 'write' ? 'en-US' : 'es-US', els.answerSpeak);
   }
 
   function currentCardClip() {
@@ -434,6 +529,8 @@
   }
 
   function destroyStudyVideo() {
+    state.studyVideoGeneration += 1;
+    state.transcriptVideoActionId += 1;
     stopStudyVideoPolling();
     try { state.studyVideoPlayer?.destroy?.(); } catch { /* YouTube may already have removed the iframe. */ }
     state.studyVideoPlayer = null;
@@ -515,8 +612,8 @@
         if (restart) {
           rememberStudyPlayback({ time: 0, selectedIndex: activeTranscript().length ? 0 : -1, persist: true });
           setTranscriptMarker('selected', activeTranscript().length ? 0 : -1);
-          player.seekTo(0, true);
-          player.playVideo();
+          player?.seekTo(0, true);
+          player?.playVideo();
         }
         return player;
       });
@@ -524,22 +621,25 @@
     destroyStudyVideo();
     state.fullVideoStudyId = study.id;
     const expectedStudyId = study.id;
+    const generation = state.studyVideoGeneration;
     const resumeAt = restart ? 0 : playbackForStudy(study).time;
     if (restart) rememberStudyPlayback({ time: 0, selectedIndex: activeTranscript().length ? 0 : -1, persist: true });
     const fallbackFrame = recreateStudyVideoHost(media, { start: resumeAt, autoplay: restart });
     state.studyVideoLoadPromise = ensureYouTubeApi().then(() => new Promise((resolve, reject) => {
-      if (activeStudy()?.id !== expectedStudyId) { resolve(null); return; }
+      if (activeStudy()?.id !== expectedStudyId || generation !== state.studyVideoGeneration) { resolve(null); return; }
       const host = fallbackFrame?.isConnected ? fallbackFrame : els.studyVideoFrame;
       if (!host) { reject(new Error('Video container is unavailable')); return; }
       state.studyVideoPlayer = new YT.Player(host, {
         events: {
           onReady: event => {
+            if (generation !== state.studyVideoGeneration) { event.target.destroy?.(); resolve(null); return; }
             state.studyVideoReady = true;
             if (resumeAt > 0 || restart) event.target.seekTo(resumeAt, true);
             if (restart) event.target.playVideo();
             resolve(event.target);
           },
           onStateChange: event => {
+            if (generation !== state.studyVideoGeneration) return;
             if (event.data === window.YT?.PlayerState?.PLAYING) {
               state.studyVideoPlaying = true;
               stopTranscriptSpeech();
@@ -556,6 +656,7 @@
         }
       });
     })).catch(error => {
+      if (generation !== state.studyVideoGeneration) return null;
       state.studyVideoLoadPromise = null;
       state.studyVideoReady = false;
       showToast('Video ready · live subtitle follow is temporarily unavailable');
@@ -592,7 +693,8 @@
 
   function scrollTranscriptTo(index) {
     if (!state.transcriptFollow || index < 0) return;
-    transcriptRow(index)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const row = transcriptRow(index);
+    if (row && !row.hidden) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function restoreTranscriptViewport() {
@@ -621,10 +723,10 @@
     const previous = state[property];
     if (previous === index) { updateTranscriptPosition(); return; }
     transcriptRow(previous)?.classList.remove(kind);
-    if (kind === 'selected') transcriptRow(previous)?.querySelector('[data-transcript-select]')?.setAttribute('aria-pressed', 'false');
+    if (kind === 'selected') transcriptRow(previous)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'false');
     state[property] = index;
     transcriptRow(index)?.classList.add(kind);
-    if (kind === 'selected') transcriptRow(index)?.querySelector('[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
+    if (kind === 'selected') transcriptRow(index)?.querySelector('button[data-transcript-select]')?.setAttribute('aria-pressed', 'true');
     if (kind === 'selected' && index >= 0) rememberStudyPlayback({ time: activeTranscript()[index]?.start, selectedIndex: index });
     updateTranscriptPosition();
     if ((kind === 'active' || kind === 'reading') && index >= 0) scrollTranscriptTo(index);
@@ -649,7 +751,7 @@
     const cues = activeTranscript();
     const range = transcriptCueRange(index, cues);
     if (!range) return;
-    const actionId = ++state.transcriptVideoActionId;
+    let actionId = ++state.transcriptVideoActionId;
     const shouldPlay = mode === 'continuous' || mode === 'clip';
     stopTranscriptSpeech();
     setTranscriptMarker('selected', index);
@@ -660,7 +762,11 @@
       return;
     }
     const media = normalizeYouTubeMedia(study?.media);
-    const player = await loadStudyVideo(false);
+    if (shouldPlay && !state.videoExpanded) { state.videoExpanded = true; renderStudyVideo(); }
+    if (!shouldPlay && !state.videoExpanded && !state.studyVideoPlayer) return;
+    const pendingPlayer = loadStudyVideo(false);
+    actionId = state.transcriptVideoActionId;
+    const player = await pendingPlayer;
     if (actionId !== state.transcriptVideoActionId) return;
     if (!player) {
       if (els.studyVideoFrame?.tagName === 'IFRAME') {
@@ -723,10 +829,16 @@
   function speakTranscriptSequence(runId, index, partIndex = 0) {
     if (runId !== state.transcriptSpeechRunId || !state.transcriptSpeechActive) return;
     const cues = activeTranscript();
+    let parts = [];
+    // Skip missing translations and filtered lines without recursive calls.
+    while (index < cues.length) {
+      if (!state.transcriptWordsOnly || learning.indexFor(activeStudy()).cues[index]?.length) {
+        parts = transcriptSpeechParts(cues[index]);
+        if (partIndex < parts.length) break;
+      }
+      index += 1; partIndex = 0;
+    }
     if (index >= cues.length) { stopTranscriptSpeech(); showToast('Transcript complete'); return; }
-    const parts = transcriptSpeechParts(cues[index]);
-    if (!parts.length) { speakTranscriptSequence(runId, index + 1, 0); return; }
-    if (partIndex >= parts.length) { speakTranscriptSequence(runId, index + 1, 0); return; }
     state.transcriptSpeechIndex = index;
     state.transcriptSpeechPart = partIndex;
     setTranscriptMarker('reading', index);
@@ -736,7 +848,11 @@
       speakTranscriptSequence(runId, partIndex + 1 < parts.length ? index : index + 1, partIndex + 1 < parts.length ? partIndex + 1 : 0);
     };
     utterance.onend = advance;
-    utterance.onerror = advance;
+    utterance.onerror = () => {
+      if (runId !== state.transcriptSpeechRunId || !state.transcriptSpeechActive) return;
+      stopTranscriptSpeech();
+      showToast('Voice playback stopped. Try Read all again.');
+    };
     speechSynthesis.speak(utterance);
   }
 
@@ -788,6 +904,16 @@
     next();
   }
 
+  function highlightedSubtitle(text, matches = [], cueIndex) {
+    let html = '', cursor = 0;
+    for (const match of matches) {
+      html += escapeHtml(text.slice(cursor, match.start));
+      html += `<button type="button" class="vocabulary-word" style="--word-color:${learning.colors[learning.colorIndex(match.card)]}" data-vocabulary-word="${escapeHtml(match.card.id)}" data-word-cue="${cueIndex}" aria-label="Study ${escapeHtml(match.card.english)}">${escapeHtml(text.slice(match.start, match.end))}</button>`;
+      cursor = match.end;
+    }
+    return html + escapeHtml(text.slice(cursor));
+  }
+
   function renderStudyTranscript() {
     const study = activeStudy();
     const cues = activeTranscript();
@@ -804,8 +930,14 @@
       state.transcriptActiveIndex = transcriptCueIndexAt(playback.time, cues);
       state.transcriptReadingIndex = -1;
     }
-    els.transcriptList.innerHTML = cues.map((cue, index) => `<article class="transcript-cue${index === state.transcriptSelectedIndex ? ' selected' : ''}${index === state.transcriptActiveIndex ? ' active' : ''}${index === state.transcriptReadingIndex ? ' reading' : ''}" data-transcript-index="${index}" data-language="${escapeHtml(state.transcriptLanguage)}">
-      <button class="transcript-cue-main" type="button" data-transcript-select="${index}" aria-pressed="${index === state.transcriptSelectedIndex}" aria-label="Select subtitle ${index + 1} at ${escapeHtml(formatClipTime(cue.start))}. Tap the selected subtitle again to play continuously."><time>${escapeHtml(formatClipTime(cue.start))}</time><span class="transcript-cue-copy"><strong>${escapeHtml(cue.en)}</strong><small>${escapeHtml(cue.es)}</small></span></button>
+    const vocabulary = learning.indexFor(study);
+    els.transcriptWords.disabled = vocabulary.matched.size === 0;
+    if (!vocabulary.matched.size) state.transcriptWordsOnly = false;
+    els.transcriptWords.textContent = `My words · ${vocabulary.matched.size}`;
+    els.transcriptWords.setAttribute('aria-pressed', String(state.transcriptWordsOnly));
+    els.transcriptVocabularyHint.textContent = vocabulary.matched.size ? 'Tap a marked word' : 'Your saved words appear here';
+    els.transcriptList.innerHTML = cues.map((cue, index) => `<article class="transcript-cue${index === state.transcriptSelectedIndex ? ' selected' : ''}${index === state.transcriptActiveIndex ? ' active' : ''}${index === state.transcriptReadingIndex ? ' reading' : ''}" data-transcript-index="${index}" ${state.transcriptWordsOnly && !vocabulary.cues[index]?.length ? 'hidden' : ''} data-language="${escapeHtml(state.transcriptLanguage)}">
+      <div class="transcript-cue-main" data-transcript-tap="${index}"><button class="transcript-time" type="button" data-transcript-select="${index}" aria-pressed="${index === state.transcriptSelectedIndex}" aria-label="Select subtitle ${index + 1} at ${escapeHtml(formatClipTime(cue.start))}. Tap again to play.">${escapeHtml(formatClipTime(cue.start))}</button><span class="transcript-cue-copy"><strong lang="en">${highlightedSubtitle(cue.en, vocabulary.cues[index], index)}</strong><small lang="es">${escapeHtml(cue.es)}</small></span></div>
       <span class="transcript-cue-tools"><button type="button" data-transcript-speak="${index}" aria-label="Speak subtitle ${index + 1}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button><button type="button" data-transcript-clip="${index}" aria-label="Play linked video for subtitle ${index + 1}" ${media ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg></button></span>
     </article>`).join('');
     els.transcriptLanguages.forEach(button => button.classList.toggle('active', button.dataset.transcriptLanguage === state.transcriptLanguage));
@@ -820,13 +952,16 @@
     if (!els.studyVideoReady) return;
     const study = activeStudy();
     const media = normalizeYouTubeMedia(study?.media);
-    els.studyVideoReady.hidden = !media;
-    els.studyVideoEmpty.hidden = Boolean(media);
+    els.studyVideoReady.hidden = !media || !state.videoExpanded;
+    els.toggleVideo.hidden = !media;
+    els.toggleVideo.textContent = state.videoExpanded ? 'Hide video' : 'Show video';
+    els.toggleVideo.setAttribute('aria-expanded', String(state.videoExpanded));
+    els.studyVideoEmpty.hidden = Boolean(media) || activeTranscript().length > 0;
     if (!media) destroyStudyVideo();
     else {
       els.studyVideoTitle.textContent = study.name || 'Study video';
       els.studyVideoMeta.textContent = `${media.name || 'YouTube video'} · ${(study.transcript || []).length} subtitles`;
-      loadStudyVideo(false);
+      if (state.videoExpanded) loadStudyVideo(false);
     }
     renderStudyTranscript();
   }
@@ -884,20 +1019,46 @@
     return incoming;
   }
 
+  function validatedIncomingStudy(raw) {
+    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id.trim() || raw.id.length > 180) throw new Error('Invalid study identity');
+    if (raw.cards !== undefined && !Array.isArray(raw.cards)) throw new Error('Invalid vocabulary');
+    if (raw.transcript !== undefined && !Array.isArray(raw.transcript) && !Array.isArray(raw.transcript?.cues)) throw new Error('Invalid transcript');
+    const transcript = normalizeTranscript(raw.transcript);
+    const cards = raw.cards || [], ids = new Set();
+    if (!cards.length && !transcript.length) throw new Error('This study contains no vocabulary or subtitles');
+    if (cards.length > 6000 || (Array.isArray(raw.transcript) && raw.transcript.length > 24000)) throw new Error('Study exceeds the transfer limit');
+    for (const card of cards) {
+      if (!card || typeof card.id !== 'string' || !card.id || ids.has(card.id) || typeof card.english !== 'string' || typeof card.spanish !== 'string') throw new Error('Invalid or duplicate vocabulary card');
+      ids.add(card.id);
+    }
+    return { ...raw, name: String(raw.name || 'Untitled study').slice(0, 120),
+      color: /^#[0-9a-f]{6}$/i.test(raw.color) ? raw.color : '#76a8ff',
+      cards: cards.map(card => ({ ...card })), transcript };
+  }
+
   async function importPackValue(value) {
     const pack = await decodePackValue(value);
-    const studies = Array.isArray(pack.studies) ? pack.studies : pack.study ? [pack.study] : [];
-    if (!studies.length) throw new Error('Empty pack');
-    studies.forEach(rawIncoming => {
+    const rawStudies = Array.isArray(pack?.studies) ? pack.studies : pack?.study ? [pack.study] : [];
+    if (!rawStudies.length || rawStudies.length > 40) throw new Error('Invalid study pack');
+    // Validate the entire pack before replacing any existing study.
+    const studies = rawStudies.map(validatedIncomingStudy);
+    if (new Set(studies.map(study => study.id)).size !== studies.length) throw new Error('Duplicate studies in pack');
+    captureStudyVideoPosition(false);
+    const previous = JSON.parse(JSON.stringify(state.library));
+    destroyStudyVideo(); stopSpeech(); resetPractice();
+    for (const rawIncoming of studies) {
       const incoming = mergeIncomingStudy(rawIncoming);
       const index = state.library.studies.findIndex(study => study.id === incoming.id);
       if (index >= 0) state.library.studies[index] = incoming; else state.library.studies.push(incoming);
-    });
+    }
+    state.transcriptStudyId = ''; state.transcriptWordsOnly = false;
     state.library.activeStudyId = studies[0].id;
     normalizeLibrary();
-    await saveLibrary();
-    render();
-    showView('today');
+    if (!await saveLibrary()) {
+      state.library = previous; render();
+      throw new Error('This study could not be saved. Keep the transfer and try again.');
+    }
+    render(); showView('today');
     showToast(studies.length === 1 ? `${studies[0].name} received` : `${studies.length} studies received`);
   }
 
@@ -955,12 +1116,13 @@
   function showToast(message) { clearTimeout(toastTimer); els.toast.textContent = message; els.toast.classList.add('show'); toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2200); }
 
   document.addEventListener('click', event => {
+    const word = event.target.closest('[data-vocabulary-word]'); if (word) { openVocabularyWord(word.dataset.vocabularyWord, Number(word.dataset.wordCue)); return; }
     const transcriptSpeak = event.target.closest('[data-transcript-speak]'); if (transcriptSpeak) { speakTranscriptCue(Number(transcriptSpeak.dataset.transcriptSpeak)); return; }
     const transcriptClip = event.target.closest('[data-transcript-clip]'); if (transcriptClip) { selectTranscriptCue(Number(transcriptClip.dataset.transcriptClip), 'clip'); return; }
-    const transcriptSelect = event.target.closest('[data-transcript-select]'); if (transcriptSelect) { activateTranscriptCue(Number(transcriptSelect.dataset.transcriptSelect)); return; }
+    const transcriptSelect = event.target.closest('[data-transcript-select], [data-transcript-tap]'); if (transcriptSelect) { activateTranscriptCue(Number(transcriptSelect.dataset.transcriptSelect ?? transcriptSelect.dataset.transcriptTap)); return; }
     const transcriptLanguage = event.target.closest('[data-transcript-language]'); if (transcriptLanguage) {
       state.transcriptLanguage = transcriptLanguage.dataset.transcriptLanguage;
-      localStorage.setItem('lingualoop.mobile.transcriptLanguage', state.transcriptLanguage);
+      savePreference('lingualoop.mobile.transcriptLanguage', state.transcriptLanguage);
       stopTranscriptSpeech();
       els.transcriptLanguages.forEach(button => button.classList.toggle('active', button === transcriptLanguage));
       $$('.transcript-cue', els.transcriptList).forEach(row => { row.dataset.language = state.transcriptLanguage; });
@@ -969,8 +1131,29 @@
     const deleteButton = event.target.closest('[data-study-delete]'); if (deleteButton) { requestStudyDelete(deleteButton.dataset.studyDelete); return; }
     const viewButton = event.target.closest('[data-view-target]'); if (viewButton) showView(viewButton.dataset.viewTarget);
     const practiceButton = event.target.closest('[data-practice-mode]'); if (practiceButton) { startPractice(practiceButton.dataset.practiceMode); showView('practice'); }
-    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); stopTranscriptSpeech(); captureStudyVideoPosition(true); destroyStudyVideo(); state.library.activeStudyId = studyButton.dataset.studyOpen; state.transcriptStudyId = ''; saveLibrary(); render(); if (state.view === 'video') { renderStudyVideo(); requestAnimationFrame(restoreTranscriptViewport); } showToast(`${activeStudy()?.name || 'Study'} is now active`); }
+    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); stopTranscriptSpeech(); captureStudyVideoPosition(true); destroyStudyVideo(); resetPractice(); state.transcriptWordsOnly = false; state.library.activeStudyId = studyButton.dataset.studyOpen; state.transcriptStudyId = ''; saveLibrary(); render(); if (state.view === 'video') { renderStudyVideo(); requestAnimationFrame(restoreTranscriptViewport); } showToast(`${activeStudy()?.name || 'Study'} is now active`); }
     const rating = event.target.closest('[data-rating]'); if (rating) rateCard(rating.dataset.rating);
+  });
+  els.toggleVideo.addEventListener('click', () => {
+    captureStudyVideoPosition(true); pauseStudyVideo();
+    state.videoExpanded = !state.videoExpanded;
+    savePreference('lingualoop.mobile.videoExpanded', String(state.videoExpanded));
+    renderStudyVideo();
+  });
+  $('#practiceBackButton').addEventListener('click', returnFromPractice);
+  els.practiceDone.addEventListener('click', returnFromPractice);
+  els.cardContext.addEventListener('click', findCardInTranscript);
+  $('#wordSheetClose').addEventListener('click', () => els.wordSheet.close());
+  els.wordSheet.addEventListener('click', event => { if (event.target === els.wordSheet && event.clientY < els.wordSheet.getBoundingClientRect().top) els.wordSheet.close(); });
+  els.wordSheet.addEventListener('close', stopSpeech);
+  els.wordSheetSpeak.addEventListener('click', () => speakText(els.wordSheetTitle.textContent, 'en-US', els.wordSheetSpeak));
+  els.wordSheetPractice.addEventListener('click', () => {
+    const id = state.wordSheetCardId; els.wordSheet.close();
+    startPractice('write', { cardIds: [id], returnTo: 'video' }); showView('practice');
+  });
+  els.transcriptWords.addEventListener('click', () => {
+    stopTranscriptSpeech(); state.transcriptWordsOnly = !state.transcriptWordsOnly;
+    renderStudyTranscript();
   });
   els.activeStudySummary.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showView(els.activeStudySummary.dataset.viewTarget); } });
   els.startReview.addEventListener('click', () => { startPractice('cards'); showView('practice'); });
@@ -984,14 +1167,14 @@
   els.transcriptStop.addEventListener('click', stopTranscriptSpeech);
   els.transcriptFollow.addEventListener('click', () => {
     state.transcriptFollow = !state.transcriptFollow;
-    localStorage.setItem('lingualoop.mobile.transcriptFollow', String(state.transcriptFollow));
+    savePreference('lingualoop.mobile.transcriptFollow', String(state.transcriptFollow));
     els.transcriptFollow.classList.toggle('active', state.transcriptFollow);
     els.transcriptFollow.setAttribute('aria-pressed', String(state.transcriptFollow));
     if (state.transcriptFollow) scrollTranscriptTo(state.transcriptReadingIndex >= 0 ? state.transcriptReadingIndex : state.transcriptActiveIndex);
   });
   els.transcriptSpeed.addEventListener('change', () => {
     state.transcriptSpeed = Math.max(.6, Math.min(1.25, Number(els.transcriptSpeed.value) || .9));
-    localStorage.setItem('lingualoop.mobile.transcriptSpeed', String(state.transcriptSpeed));
+    savePreference('lingualoop.mobile.transcriptSpeed', String(state.transcriptSpeed));
     if (state.transcriptSpeechActive) { stopTranscriptSpeech(); showToast('Voice speed updated · tap Read all to continue'); }
   });
   els.writeForm.addEventListener('submit', checkWrittenAnswer);
@@ -1001,6 +1184,11 @@
   addEventListener('pagehide', () => captureStudyVideoPosition(true));
   (async () => {
     await loadLibrary(); await importPackFromHash(); render(); showView('today');
-    if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => registration.update()).catch(() => {}));
+    if ('serviceWorker' in navigator) {
+      const registerOfflineShell = () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => registration.update()).catch(() => {});
+      // IndexedDB/import may finish after load; do not miss offline installation.
+      if (document.readyState === 'complete') registerOfflineShell();
+      else addEventListener('load', registerOfflineShell, { once: true });
+    }
   })();
 })();

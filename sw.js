@@ -1,18 +1,27 @@
-const CACHE = 'lingualoop-mobile-v14';
-const ASSETS = ['./', './index.html', './styles.css?v=8', './app.js?v=11', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'lingualoop-mobile-v16';
+const ASSETS = ['./', './index.html', './styles.css?v=9', './learning.js?v=1', './app.js?v=13', './manifest.webmanifest', './icon.svg'];
+const assetURLs = new Set(ASSETS.map(path => new URL(path, self.location.href).href));
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())));
-self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
+self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('lingualoop-mobile-') && key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).then(response => {
-      const copy = response.clone();
-      caches.open(CACHE).then(cache => cache.put('./index.html', copy));
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  const navigation = event.request.mode === 'navigate';
+  if (!navigation && !assetURLs.has(url.href)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    if (!navigation) {
+      const cached = await cache.match(event.request);
+      if (cached) return cached;
+    }
+    try {
+      const response = await fetch(event.request);
+      if (!response.ok) throw new Error('Asset unavailable');
+      await cache.put(navigation ? './index.html' : event.request, response.clone());
       return response;
-    }).catch(() => caches.match('./index.html').then(cached => cached || caches.match('./'))));
-    return;
-  }
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); return response;
-  }).catch(() => caches.match('./index.html'))));
+    } catch {
+      // An HTML fallback is valid only for navigation, never for code or media.
+      return await cache.match(navigation ? './index.html' : event.request) || Response.error();
+    }
+  })());
 });
