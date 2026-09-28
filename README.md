@@ -16,8 +16,9 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Automatic session and written-draft recovery after reopening
 - Learned words can be removed from phone practice with confirmation, Undo and permanent access to Restore in Studies
 - Removals and phone progress survive updated desktop imports
-- Full-screen layouts with the default desktop Dark palette, solid study cards and fixed control positions
-- Always-visible session settings, reserved answer/hint/feedback regions and card-level audio
+- Full-screen layouts with neutral graphite/blue practice and library screens, solid study cards and fixed control positions
+- Always-visible, evenly sized session-setting buttons, reserved answer/hint/feedback regions and card-level audio
+- Study rows use a soft background tint matching their imported study color
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
 - Full-video comprehension with active-subtitle following, direct seeking and individual subtitle clips; desktop chains do not affect phone playback

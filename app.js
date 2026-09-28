@@ -266,9 +266,10 @@
     els.studyList.innerHTML = studies.length ? studies.map(study => {
       const active = study.id === state.library.activeStudyId;
       const confirming = study.id === state.pendingDeleteStudyId;
-      return `<article class="${active ? 'active' : ''}${confirming ? ' confirming-delete' : ''}" data-study-id="${escapeHtml(study.id)}">
+      const studyColor = /^#[0-9a-f]{6}$/i.test(study.color) ? study.color : '#76a8ff';
+      return `<article class="${active ? 'active' : ''}${confirming ? ' confirming-delete' : ''}" data-study-id="${escapeHtml(study.id)}" style="--study-color:${studyColor}">
         <button class="study-select-button" type="button" data-study-open="${escapeHtml(study.id)}" aria-pressed="${active}" aria-label="${active ? 'Active study' : 'Use'} ${escapeHtml(study.name)}">
-          <span class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></span>
+          <span class="study-swatch" style="background:var(--study-color)"></span>
           <span class="study-list-copy"><strong>${escapeHtml(study.name)}</strong><small>${availableCards(study).length} words · ${(study.transcript || []).length} subtitles · ${dueCards(study).length} due</small></span>
           <span class="study-active-state">${active ? 'ACTIVE' : 'USE'}</span>
         </button>
