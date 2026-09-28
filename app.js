@@ -26,7 +26,7 @@
     transcriptVideoActionId: 0, transcriptSeekTarget: null,
     transcriptSelectedIndex: -1, transcriptActiveIndex: -1, transcriptReadingIndex: -1,
     transcriptStudyId: '', transcriptMarkerIndex: -1, transcriptBrowseIndex: -1,
-    transcriptFollowSuspended: false, transcriptCompact: false, transcriptControlsPinned: false,
+    transcriptFollowSuspended: false,
     transcriptLanguage: readPreference('lingualoop.mobile.transcriptLanguage') || 'both',
     transcriptSpeed: Number(readPreference('lingualoop.mobile.transcriptSpeed')) || .9,
     transcriptFollow: readPreference('lingualoop.mobile.transcriptFollow') !== 'false',
@@ -37,10 +37,10 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const els = {
-    transcriptDock: $('#transcriptDock'), transcriptDockAnchor: $('#transcriptDockAnchor'), transcriptNavigation: $('#transcriptNavigation'),
-    transcriptControls: $('#transcriptControls'), transcriptControlsButton: $('#transcriptControlsButton'), transcriptLastSelection: $('#transcriptLastSelection'),
-    transcriptBrowsePosition: $('#transcriptBrowsePosition'), transcriptNavigator: $('#transcriptNavigator'), transcriptJumpButton: $('#transcriptJumpButton'),
-    transcriptJumpForm: $('#transcriptJumpForm'), transcriptJumpInput: $('#transcriptJumpInput'), transcriptJumpCancel: $('#transcriptJumpCancel'),
+    transcriptDock: $('#transcriptDock'), transcriptNavigation: $('#transcriptNavigation'),
+    transcriptControls: $('#transcriptControls'), transcriptLastSelection: $('#transcriptLastSelection'),
+    transcriptBrowsePosition: $('#transcriptBrowsePosition'), transcriptNavigator: $('#transcriptNavigator'), 
+    transcriptJumpForm: $('#transcriptJumpForm'), transcriptJumpInput: $('#transcriptJumpInput'), 
     wordSheet: $('#wordSheet'), wordSheetTitle: $('#wordSheetTitle'), wordSheetMeaning: $('#wordSheetMeaning'), wordSheetContext: $('#wordSheetContext'), wordSheetSpeak: $('#wordSheetSpeak'), wordSheetPractice: $('#wordSheetPractice'),
     toggleVideo: $('#toggleStudyVideo'), cardContext: $('#cardContextButton'), practiceSummary: $('#practiceSummary'), practiceDone: $('#practiceDoneButton'),
     transcriptWords: $('#transcriptWordsButton'), transcriptVocabularyHint: $('#transcriptVocabularyHint'),
@@ -188,8 +188,6 @@
     closeTranscriptJump();
     if (state.view !== view) {
       state.transcriptFollowSuspended = false;
-      state.transcriptControlsPinned = false;
-      setTranscriptCompact(false);
     }
     if (els.wordSheet.open) els.wordSheet.close();
     if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
@@ -241,8 +239,9 @@
     els.statStrong.textContent = cards.filter(card => card.stage === 'strong').length;
     els.cardsCount.textContent = cards.length; els.writeCount.textContent = cards.length;
     els.startReview.disabled = !cards.length;
-    $('#resumePracticeButton').hidden = !resume;
-    if (resume) $('#resumePracticeButton span').textContent = `Resume · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount} words`;
+    $('#resumePracticeButton').disabled = !resume;
+    if (!resume) $('#resumePracticeButton span').textContent = 'Resume';
+    if (resume) $('#resumePracticeButton span').textContent = `Resume · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount}`;
     const batchSize = nextBatch(!due.length).length;
     els.startReview.querySelector('span').textContent = `${resume ? 'Start new' : due.length ? 'Start' : 'Practice'} · ${batchSize} ${batchSize === 1 ? 'word' : 'words'}`;
     $('#sessionStatus').textContent = attempts ? `${independent} / ${attempts} recalled without help` : '';
@@ -399,32 +398,38 @@
     els.promptContext.textContent = listening ? 'Tap Listen as often as you need.' : writing ? (context ? 'Complete the gap. Use a hint whenever you need one.' : '') : (context?.text || card.context);
     els.answerText.textContent = writing ? card.english : card.spanish;
     els.answerContext.textContent = context?.text || '';
-    els.answerSpeak.querySelector('span').textContent = writing ? 'English' : 'Spanish';
+    els.answerSpeak.querySelector('span').textContent = writing ? 'Answer' : 'Spanish';
     els.answerSpeak.setAttribute('aria-label', writing ? 'Pronounce the English answer' : 'Pronounce the Spanish answer');
-    els.speak.querySelector('span').textContent = listening ? 'Listen' : 'English';
+    els.speak.querySelector('span').textContent = writing ? 'Listen' : 'English';
     els.speak.setAttribute('aria-label', listening ? 'Listen to the word to recall' : 'Pronounce the English word');
-    els.cardContext.hidden = !(learning.indexFor(studyForEntry(entry)).byCard.get(card.id)?.length);
+    els.cardContext.disabled = !(learning.indexFor(studyForEntry(entry)).byCard.get(card.id)?.length);
     els.writeForm.hidden = !writing; if (!restore) els.writeAnswer.value = '';
     els.clipButton.hidden = true;
-    $('.card-content').scrollTop = 0;
+    $$('.prompt-scroll, .answer-scroll').forEach(area => { area.scrollTop = 0; });
     restorePracticePresentation();
   }
   function restorePracticePresentation() {
     if (!currentCard() || !state.evidence) return;
     const evidence = state.evidence, writing = state.practiceMode !== 'cards';
     state.revealed = evidence.revealed;
-    els.answerArea.hidden = !evidence.revealed; els.reveal.hidden = evidence.revealed;
+    $('#answerContent').hidden = !evidence.revealed;
+    $('#answerPlaceholder').hidden = evidence.revealed;
+    els.answerSpeak.disabled = !evidence.revealed;
+    els.reveal.disabled = evidence.revealed;
     els.reveal.textContent = writing ? 'Show answer' : 'Reveal answer';
-    els.ratingRow.hidden = !evidence.revealed || writing;
+    els.ratingRow.hidden = writing;
+    els.ratingRow.querySelectorAll('button').forEach(button => { button.disabled = !evidence.revealed || state.ratingPending; });
     els.ratingRow.querySelector('[data-rating=again] small').textContent = state.queue.slice(state.index + 1).some(item => entryKey(item) !== entryKey(currentEntry())) && !currentEntry()?.retry ? 'One more look' : 'Soon';
-    $('#practiceNextButton').hidden = !evidence.revealed || !writing;
-    $('#practiceRetryButton').hidden = !writing || evidence.revealed || !evidence.wrongAttempts;
+    $('#practiceNextButton').hidden = !writing;
+    $('#practiceNextButton').disabled = !evidence.revealed || state.ratingPending;
+    $('#practiceRetryButton').hidden = !writing;
+    $('#practiceRetryButton').disabled = evidence.revealed || !evidence.wrongAttempts;
     $('#practiceHintButton').disabled = evidence.revealed;
-    $('#practiceHintText').textContent = evidence.hint || ''; $('#practiceHintText').hidden = !evidence.hint;
-    els.writeForm.hidden = !writing || evidence.revealed;
+    $('#practiceHintText').textContent = evidence.hint || ''; $('#practiceHintText').title = evidence.hint || '';
+    els.writeForm.hidden = !writing;
     els.writeAnswer.disabled = evidence.revealed;
     els.writeForm.querySelector('button').disabled = evidence.revealed;
-    els.writeFeedback.textContent = evidence.feedback || ''; els.writeFeedback.className = evidence.feedbackClass || '';
+    els.writeFeedback.textContent = evidence.feedback || (writing ? 'Write your answer, then check.' : evidence.revealed ? 'How well did you remember?' : 'Recall the meaning first.'); els.writeFeedback.className = evidence.feedbackClass || '';
     if (evidence.spelling) {
       const { before, middle, after } = evidence.spelling;
       const detail = document.createElement('span'); detail.className = 'spelling-detail';
@@ -512,7 +517,7 @@
       }
       if (run !== state.practiceRun) return;
       renderPracticeCard(); snapshotSession(); await saveLibrary(); render();
-    } finally { state.ratingPending = false; $$('.rating-row button, #practiceNextButton').forEach(button => { button.disabled = false; }); }
+    } finally { state.ratingPending = false; restorePracticePresentation(); }
   }
 
   function openVocabularyWord(cardId, cueIndex) {
@@ -521,6 +526,7 @@
     captureStudyVideoPosition(true); pauseStudyVideo(); stopSpeech();
     state.wordSheetCardId = cardId; state.wordSheetCueIndex = cueIndex;
     state.inlinePractice = null;
+    els.wordSheet.dataset.situation = 'lookup';
     els.wordSheet.setAttribute('aria-labelledby', 'wordSheetTitle'); els.wordSheet.removeAttribute('aria-label');
     $('#wordPracticePanel').hidden = true; els.wordSheetPractice.hidden = false;
     els.wordSheetTitle.hidden = false; els.wordSheetMeaning.hidden = false; els.wordSheetContext.hidden = false;
@@ -861,21 +867,9 @@
     updateTranscriptFollowButton();
   }
 
-  function setTranscriptCompact(compact) {
-    state.transcriptCompact = compact;
-    els.transcriptDock.classList.toggle('compact', compact);
-    els.transcriptControlsButton.setAttribute('aria-expanded', String(!compact));
-    els.transcriptControls.inert = compact;
-  }
-
   function transcriptViewportBounds() {
-    const viewportTop = window.visualViewport?.offsetTop || 0;
-    const dock = els.transcriptDock.getBoundingClientRect();
-    // Reserve the dock's height even before it sticks, so a jump cannot land behind it.
-    const safeTop = Number.parseFloat(getComputedStyle(els.transcriptDock).top) || 0;
-    const top = Math.max(viewportTop, safeTop) + (els.transcriptDock.hidden ? 0 : dock.height) + 8;
-    const bottom = Math.min(viewportTop + (window.visualViewport?.height || innerHeight), $('.bottom-nav').getBoundingClientRect().top) - 8;
-    return { top, bottom: Math.max(top + 60, bottom) };
+    const rect = els.transcriptPanel.getBoundingClientRect();
+    return { top: rect.top + 8, bottom: rect.bottom - 8 };
   }
 
   function scrollTranscriptTo(index) {
@@ -899,7 +893,6 @@
     cancelTranscriptPositioning();
     const target = transcriptRow(index);
     if (!target || target.hidden) return;
-    if (!state.transcriptControlsPinned) setTranscriptCompact(true);
     target.classList.add('positioning');
     const studyId = activeStudy()?.id;
     let frames = 0;
@@ -917,7 +910,7 @@
       const height = Math.max(60, bottom - top - 16);
       const delta = rect.height > height ? rect.top - top - 8 : rect.top + rect.height / 2 - (top + bottom) / 2;
       // Lazy rows settle after an initial jump; measure the actual visible row.
-      if (Math.abs(delta) > 1) scrollTo({ top: Math.max(0, scrollY + delta), behavior: 'instant' });
+      if (Math.abs(delta) > 1) els.transcriptPanel.scrollTo({ top: Math.max(0, els.transcriptPanel.scrollTop + delta), behavior: 'instant' });
       if (++frames < 30) transcriptPositionFrame = requestAnimationFrame(align);
       else { cancelTranscriptPositioning(); scheduleTranscriptViewportUpdate(); }
     };
@@ -928,7 +921,7 @@
   function restoreTranscriptViewport() {
     if (state.view !== 'video') return;
     const index = state.transcriptMarkerIndex;
-    if (index <= 0) { scrollTo({ top: 0, behavior: 'auto' }); return; }
+    if (index <= 0) { els.transcriptPanel.scrollTop = 0; return; }
     positionTranscriptViewport(index);
   }
 
@@ -937,8 +930,8 @@
     if (!cues.length) return;
     state.transcriptBrowseIndex = Math.max(0, Math.min(cues.length - 1, index));
     const number = state.transcriptBrowseIndex + 1;
-    els.transcriptBrowsePosition.textContent = `${number} / ${cues.length}`;
-    els.transcriptJumpButton.setAttribute('aria-label', `Browsing subtitle ${number} of ${cues.length}. Go to subtitle number`);
+    els.transcriptBrowsePosition.textContent = `/ ${cues.length}`;
+    if (document.activeElement !== els.transcriptJumpInput) els.transcriptJumpInput.value = number;
     if (document.activeElement !== els.transcriptNavigator) els.transcriptNavigator.value = number;
     els.transcriptNavigator.setAttribute('aria-valuetext', `Subtitle ${number} of ${cues.length}, ${formatClipTime(cues[number - 1].start)}`);
   }
@@ -950,7 +943,6 @@
     transcriptViewportFrame = requestAnimationFrame(() => {
       transcriptViewportFrame = 0;
       if (state.view !== 'video' || !transcriptVisibleRows.length) return;
-      if (!state.transcriptControlsPinned && !state.transcriptCompact && els.transcriptDockAnchor.getBoundingClientRect().top < -40 && els.transcriptJumpForm.hidden) setTranscriptCompact(true);
       if (transcriptPositionFrame) return;
       const bounds = transcriptViewportBounds();
       const center = (bounds.top + bounds.bottom) / 2;
@@ -965,8 +957,8 @@
   }
 
   function closeTranscriptJump() {
-    els.transcriptJumpForm.hidden = true;
-    els.transcriptJumpButton.setAttribute('aria-expanded', 'false');
+    // The subtitle jump field stays visible. Only release the keyboard.
+    els.transcriptJumpInput.blur();
   }
 
   function browseTranscript(index) {
@@ -1220,7 +1212,7 @@
     els.transcriptControls.querySelector('.transcript-focus').hidden = !cues.length;
     els.transcriptEmpty.hidden = Boolean(cues.length);
     els.transcriptSummary.textContent = cues.length ? `${cues.length} SUBTITLES` : 'FULL STUDY';
-    if (!cues.length) { transcriptVisibleRows = []; els.transcriptList.replaceChildren(); setTranscriptCompact(false); return; }
+    if (!cues.length) { transcriptVisibleRows = []; els.transcriptList.replaceChildren(); return; }
     if (state.transcriptStudyId !== study.id) {
       state.transcriptStudyId = study.id;
       const playback = playbackForStudy(study);
@@ -1229,8 +1221,6 @@
       state.transcriptReadingIndex = -1;
       state.transcriptMarkerIndex = state.transcriptActiveIndex >= 0 ? state.transcriptActiveIndex : state.transcriptSelectedIndex;
       state.transcriptFollowSuspended = false;
-      state.transcriptControlsPinned = false;
-      setTranscriptCompact(false);
     }
     const vocabulary = learning.indexFor(study);
     els.transcriptWords.disabled = vocabulary.matched.size === 0;
@@ -1244,6 +1234,7 @@
     </article>`).join('');
     els.transcriptLanguages.forEach(button => button.classList.toggle('active', button.dataset.transcriptLanguage === state.transcriptLanguage));
     els.transcriptSpeed.value = String(state.transcriptSpeed);
+    $('#transcriptSpeedButton').textContent = `${Number(state.transcriptSpeed).toFixed(2)}×`;
     transcriptVisibleRows = [...els.transcriptList.children].filter(row => !row.hidden);
     els.transcriptNavigator.max = els.transcriptJumpInput.max = String(cues.length);
     els.transcriptNavigator.disabled = cues.length < 2;
@@ -1259,10 +1250,12 @@
     const study = activeStudy();
     const media = normalizeYouTubeMedia(study?.media);
     els.studyVideoReady.hidden = !media || !state.videoExpanded;
-    els.toggleVideo.hidden = !media;
-    els.toggleVideo.textContent = state.videoExpanded ? 'Hide video' : 'Show video';
-    els.toggleVideo.setAttribute('aria-expanded', String(state.videoExpanded));
-    els.studyVideoEmpty.hidden = Boolean(media) || activeTranscript().length > 0;
+    $('#videoSurface').hidden = !media;
+    $('#videoPlaceholder').hidden = Boolean(media && state.videoExpanded);
+    els.toggleVideo.disabled = !media;
+    els.toggleVideo.setAttribute('aria-pressed', String(Boolean(media && state.videoExpanded)));
+    els.toggleVideo.setAttribute('aria-label', state.videoExpanded ? 'Switch to reading without video' : 'Show the study video');
+    els.studyVideoEmpty.hidden = true;
     if (!media) destroyStudyVideo();
     else {
       els.studyVideoTitle.textContent = study.name || 'Study video';
@@ -1305,7 +1298,7 @@
 
   function renderRetiredWords() {
     const words = state.library.studies.flatMap(study => study.cards.filter(card => card.retiredAt).map(card => ({ study, card })));
-    $('#retiredWordsToggle').textContent = `Learned words · ${words.length}`;
+    $('#retiredWordsToggle').textContent = `Learned · ${words.length}`;
     $('#retiredWordsList').innerHTML = words.length ? words.map(({ study, card }) => `<article class="retired-word"><div><strong>${escapeHtml(card.english)}</strong><small>${escapeHtml(study.name)}</small></div><button type="button" class="text-button" data-restore-study="${escapeHtml(study.id)}" data-restore-word="${escapeHtml(card.id)}">Restore</button></article>`).join('') : '<p class="muted">Words you remove as learned will stay here, ready to restore.</p>';
   }
   function requestRetireWord(study, card) {
@@ -1354,6 +1347,7 @@
     const context = learning.contextFor(study, card, state.wordSheetCueIndex);
     // The word was already visible in the lookup: this is guided practice, not an independent test.
     state.inlinePractice = { studyId: study.id, cardId: card.id, answered: false, revealed: false };
+    els.wordSheet.dataset.situation = 'practice';
     els.wordSheet.setAttribute('aria-label', 'Practice the word in context');
     els.wordSheet.removeAttribute('aria-labelledby');
     els.wordSheetTitle.hidden = true; els.wordSheetMeaning.hidden = true; els.wordSheetContext.hidden = true; els.wordSheetSpeak.hidden = true;
@@ -1479,7 +1473,7 @@
         new Promise((_, reject) => setTimeout(() => reject(new Error('Clipboard reading timed out')), 3000))
       ]);
       await importPackValue(value);
-      els.manualTransferPanel.hidden = true;
+      els.manualTransferPanel.hidden = false;
       els.manualTransferInput.value = '';
     } catch {
       revealManualTransfer();
@@ -1493,7 +1487,7 @@
   async function importManualTransfer() {
     try {
       await importPackValue(els.manualTransferInput.value);
-      els.manualTransferPanel.hidden = true;
+      els.manualTransferPanel.hidden = false;
       els.manualTransferInput.value = '';
     } catch {
       showToast('This is not a valid LinguaLoop transfer');
@@ -1558,7 +1552,14 @@
   $('#confirmRetireWordButton').addEventListener('click', confirmRetireWord);
   $('#cancelRetireWordButton').addEventListener('click', () => $('#retireWordDialog').close());
   $('#wordUndoButton').addEventListener('click', () => { if (state.retireUndo) restoreRetiredWord(state.retireUndo.studyId, state.retireUndo.cardId); });
-  $('#retiredWordsToggle').addEventListener('click', () => { const panel = $('#retiredWordsPanel'); panel.hidden = !panel.hidden; $('#retiredWordsToggle').setAttribute('aria-expanded', String(!panel.hidden)); });
+  function selectLibraryCollection(learned) {
+    els.studyList.hidden = learned; $('#retiredWordsPanel').hidden = !learned;
+    $('#retiredWordsToggle').setAttribute('aria-pressed', String(learned));
+    $('#libraryStudiesButton').setAttribute('aria-pressed', String(!learned));
+    $('.library-content').scrollTop = 0;
+  }
+  $('#retiredWordsToggle').addEventListener('click', () => selectLibraryCollection(true));
+  $('#libraryStudiesButton').addEventListener('click', () => selectLibraryCollection(false));
   $('#wordPracticeForm').addEventListener('submit', event => { event.preventDefault(); finishInlinePractice(false); });
   $('#wordPracticeReveal').addEventListener('click', () => finishInlinePractice(true));
   $('#wordPracticeHint').addEventListener('click', () => { const card = cardForEntry(state.inlinePractice); if (card) $('#wordPracticeFeedback').textContent = `Meaning: ${card.spanish} · starts with ${[...card.english][0]}…`; });
@@ -1584,25 +1585,10 @@
       positionTranscriptViewport(index);
     } else cancelTranscriptPositioning();
   });
-  els.transcriptControlsButton.addEventListener('click', () => {
-    state.transcriptControlsPinned = state.transcriptCompact;
-    setTranscriptCompact(!state.transcriptCompact);
-    scheduleTranscriptViewportUpdate();
-  });
   els.transcriptLastSelection.addEventListener('click', () => browseTranscript(state.transcriptSelectedIndex));
   els.transcriptNavigator.addEventListener('input', () => browseTranscript(Number(els.transcriptNavigator.value) - 1));
   els.transcriptNavigator.addEventListener('blur', scheduleTranscriptViewportUpdate);
-  els.transcriptJumpButton.addEventListener('click', () => {
-    const open = els.transcriptJumpForm.hidden;
-    els.transcriptJumpForm.hidden = !open;
-    els.transcriptJumpButton.setAttribute('aria-expanded', String(open));
-    if (open) {
-      els.transcriptJumpInput.value = Math.max(1, state.transcriptBrowseIndex + 1);
-      suspendTranscriptFollow();
-      els.transcriptJumpInput.focus({ preventScroll: true });
-      els.transcriptJumpInput.select();
-    }
-  });
+  els.transcriptJumpInput.addEventListener('focus', suspendTranscriptFollow);
   els.transcriptJumpForm.addEventListener('submit', event => {
     event.preventDefault();
     const index = Number(els.transcriptJumpInput.value) - 1;
@@ -1611,10 +1597,8 @@
     els.transcriptJumpInput.blur();
     browseTranscript(index);
   });
-  els.transcriptJumpCancel.addEventListener('click', () => { closeTranscriptJump(); els.transcriptJumpButton.focus({ preventScroll: true }); });
-  els.transcriptJumpForm.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { closeTranscriptJump(); els.transcriptJumpButton.focus({ preventScroll: true }); }
-  });
+  els.transcriptJumpForm.addEventListener('keydown', event => { if (event.key === 'Escape') closeTranscriptJump(); });
+  els.transcriptPanel.addEventListener('scroll', scheduleTranscriptViewportUpdate, { passive: true });
   addEventListener('scroll', scheduleTranscriptViewportUpdate, { passive: true });
   addEventListener('resize', scheduleTranscriptViewportUpdate, { passive: true });
   window.visualViewport?.addEventListener('resize', scheduleTranscriptViewportUpdate, { passive: true });
@@ -1632,6 +1616,12 @@
   addEventListener('keydown', event => {
     if (!event.target.closest('input, select, textarea, button, dialog') && ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) suspendTranscriptFollow();
   });
+  $('#transcriptSpeedButton').addEventListener('click', () => {
+    const speeds = [.75, .9, 1, 1.1];
+    els.transcriptSpeed.value = String(speeds[(speeds.indexOf(state.transcriptSpeed) + 1) % speeds.length]);
+    els.transcriptSpeed.dispatchEvent(new Event('change'));
+    $('#transcriptSpeedButton').textContent = `${state.transcriptSpeed.toFixed(2)}×`;
+  });
   els.transcriptSpeed.addEventListener('change', () => {
     state.transcriptSpeed = Math.max(.6, Math.min(1.25, Number(els.transcriptSpeed.value) || .9));
     savePreference('lingualoop.mobile.transcriptSpeed', String(state.transcriptSpeed));
@@ -1648,6 +1638,7 @@
     const height = Math.round(viewport?.height || innerHeight);
     document.documentElement.style.setProperty('--app-height', `${height}px`);
     document.body.classList.toggle('keyboard-open', Boolean(viewport && innerHeight - height > 120));
+    document.body.classList.toggle('compact-viewport', height < 460 && innerWidth < 600);
   }
   window.visualViewport?.addEventListener('resize', updateAppViewport);
   addEventListener('resize', updateAppViewport);

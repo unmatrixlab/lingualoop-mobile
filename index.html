@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#08110e">
+  <meta name="theme-color" content="#0b100e">
   <meta name="color-scheme" content="dark">
   <meta name="description" content="A focused, offline vocabulary companion for LinguaLoop.">
   <title>LinguaLoop Mobile</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body data-view="today">
   <div class="app-shell">
@@ -61,12 +61,12 @@
             </div>
             <p id="practiceModeHint">Recall, write and listen in one session.</p>
           </div>
+        </section>
           <div class="session-launch">
-            <button class="resume-practice text-button" id="resumePracticeButton" type="button" hidden><span>Resume practice</span><span aria-hidden="true">→</span></button>
+            <button class="resume-practice text-button" id="resumePracticeButton" type="button" disabled><span>Resume practice</span><span aria-hidden="true">→</span></button>
             <button class="primary-action" id="startReviewButton" type="button"><span>Start · 5 words</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
             <p class="session-status" id="sessionStatus" role="status"></p>
           </div>
-        </section>
         <button class="continue-reading" id="continueReadingButton" type="button">
           <span class="reading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2 2-2h6v14h-6l-2 2-2-2H4zM12 7v14"/></svg></span>
           <span><strong>Continue reading</strong><small id="continueReadingLabel">Return to your study</small></span>
@@ -97,25 +97,28 @@
           </section>
           <article class="recall-card" id="recallCard">
             <div class="card-content">
-              <span class="card-label" id="promptDirection">ENGLISH → SPANISH</span>
-              <h2 id="promptText">Ready?</h2>
-              <p id="promptContext"></p><p class="practice-hint-text" id="practiceHintText" role="status" hidden></p>
-            <div class="answer-area" id="answerArea" hidden>
-              <div class="answer-heading"><span>ANSWER</span><button class="practice-tool-button listen" id="answerSpeakButton" type="button" aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Spanish</span></button></div>
-              <strong id="answerText"></strong><p id="answerContext"></p>
-            </div>
+              <section class="prompt-pane" aria-label="Word to recall">
+                <span class="card-label" id="promptDirection">ENGLISH → SPANISH</span>
+                <div class="prompt-scroll"><h2 id="promptText">Ready?</h2><p id="promptContext"></p></div>
+                <p class="practice-hint-text" id="practiceHintText" role="status"></p>
+              </section>
+              <section class="answer-area" id="answerArea" aria-label="Answer">
+                <span class="card-label">ANSWER</span>
+                <div class="answer-scroll"><p id="answerPlaceholder">Reveal to compare.</p><div id="answerContent" hidden><strong id="answerText"></strong><p id="answerContext"></p></div></div>
+              </section>
             </div>
             <div class="card-toolbar">
               <button class="practice-tool-button listen" id="speakButton" type="button" aria-label="Pronounce the English word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>English</span></button>
-              <button class="text-button context-link" id="cardContextButton" type="button" hidden>In transcript ↗</button>
+              <button class="practice-tool-button listen" id="answerSpeakButton" type="button" disabled aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Spanish</span></button>
+              <button class="text-button context-link" id="cardContextButton" type="button" disabled aria-label="Find this word in the transcript">Text ↗</button>
               <button id="clipButton" type="button" hidden aria-label="Play the original video fragment">Clip</button>
             </div>
           </article>
 
           <div class="practice-actions">
           <form class="write-form" id="writeForm" hidden>
-            <label for="writeAnswer">Your English</label>
-            <div><input id="writeAnswer" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
+            <label class="sr-only" for="writeAnswer">Your English</label>
+            <div><input id="writeAnswer" placeholder="Your English" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
           </form>
           <p id="writeFeedback" role="status"></p>
 
@@ -138,36 +141,32 @@
 
       <section class="view" data-view="video" aria-label="Video and transcript">
         <div class="study-video-workspace">
-        <div id="transcriptDockAnchor" aria-hidden="true"></div>
         <section class="transcript-dock" id="transcriptDock" aria-label="Video and transcript controls">
-          <section class="study-video-card" id="studyVideoReady" hidden>
-            <div class="study-video-frame"><div id="studyVideoFrame" aria-label="Complete YouTube study video"></div></div>
-          </section>
-          <div class="transcript-navigation" id="transcriptNavigation" hidden>
+          <div class="video-surface" id="videoSurface">
+            <section class="study-video-card" id="studyVideoReady" hidden><div class="study-video-frame"><div id="studyVideoFrame" aria-label="Complete YouTube study video"></div></div></section>
+            <p class="video-placeholder" id="videoPlaceholder">Reading view</p>
+            <button class="video-restart" id="restartStudyVideoButton" type="button" aria-label="Restart the study video">↺ Start over</button>
+          </div>
+          <div class="transcript-navigation" id="transcriptNavigation">
             <div class="transcript-navigation-row">
-              <button class="transcript-locate" id="transcriptLastSelection" type="button" disabled aria-label="Return to last selected subtitle" title="Return to last selected subtitle without moving the video"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg></button>
-              <button class="transcript-jump-button" id="transcriptJumpButton" type="button" aria-label="Go to subtitle number" aria-expanded="false" aria-controls="transcriptJumpForm"><span id="transcriptBrowsePosition">1 / 1</span></button>
-              <button class="transcript-controls-button" id="transcriptControlsButton" type="button" aria-expanded="true" aria-controls="transcriptControls">Controls <span aria-hidden="true">⌃</span></button>
-              <button class="transcript-follow-button active" id="studyTranscriptFollowButton" type="button" aria-pressed="true" title="Follow the playing subtitle"><i></i><span>Follow</span></button>
+              <button class="transcript-locate" id="transcriptLastSelection" type="button" disabled aria-label="Return to last selected subtitle" title="Return to last selected subtitle"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg></button>
+              <form id="transcriptJumpForm" class="transcript-jump-form"><label class="sr-only" for="transcriptJumpInput">Subtitle number</label><input id="transcriptJumpInput" type="number" inputmode="numeric" min="1" max="1" value="1" required aria-label="Subtitle number"><span id="transcriptBrowsePosition">/ 1</span><button type="submit">Go</button></form>
+              <button class="transcript-follow-button active" id="studyTranscriptFollowButton" type="button" aria-pressed="true"><i></i><span>Follow</span></button>
+              <button id="toggleStudyVideo" type="button" class="text-button" aria-pressed="true" aria-controls="studyVideoReady">Video</button>
             </div>
             <input class="transcript-navigator" id="transcriptNavigator" type="range" min="1" max="1" value="1" step="1" aria-label="Browse subtitles without moving the video">
-            <form id="transcriptJumpForm" class="transcript-jump-form" hidden>
-              <label for="transcriptJumpInput">Subtitle</label><input id="transcriptJumpInput" type="number" inputmode="numeric" min="1" max="1" required aria-label="Subtitle number"><button type="submit">Go</button><button id="transcriptJumpCancel" type="button" aria-label="Cancel subtitle navigation">×</button>
-            </form>
           </div>
           <div id="transcriptControls" class="transcript-controls">
-          <div class="study-video-info"><div><span>NOW WATCHING</span><strong id="studyVideoTitle">Study video</strong><small id="studyVideoMeta"></small></div><button class="secondary-action" id="restartStudyVideoButton" type="button">Start over</button></div>
-            <header class="transcript-header">
-              <div><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></div>
-              <button id="toggleStudyVideo" type="button" class="text-button" aria-expanded="true" aria-controls="studyVideoReady">Hide video</button>
-            </header>
+          <div class="study-video-info sr-only"><strong id="studyVideoTitle">Study video</strong><small id="studyVideoMeta"></small></div>
+          <header class="transcript-header sr-only"><h2 id="studyTranscriptTitle">Read along</h2><small id="studyTranscriptPosition">Choose a subtitle</small></header>
           <div class="transcript-reader">
             <div class="transcript-language" role="group" aria-label="Transcript language">
               <button type="button" data-transcript-language="en">EN</button>
               <button type="button" data-transcript-language="es">ES</button>
               <button class="active" type="button" data-transcript-language="both">Both</button>
             </div>
-            <label class="transcript-speed"><span>VOICE</span><select id="studyTranscriptSpeed" aria-label="Transcript voice speed"><option value="0.75">0.75×</option><option value="0.9" selected>0.90×</option><option value="1">1.00×</option><option value="1.1">1.10×</option></select></label>
+            <label class="transcript-speed" hidden><span>VOICE</span><select id="studyTranscriptSpeed" aria-label="Transcript voice speed"><option value="0.75">0.75×</option><option value="0.9" selected>0.90×</option><option value="1">1.00×</option><option value="1.1">1.10×</option></select></label>
+            <button id="transcriptSpeedButton" class="transcript-speed-button" type="button" aria-label="Voice speed. Tap to change">0.90×</button>
             <button class="transcript-read-button" id="studyTranscriptReadButton" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Read all</span></button>
             <button class="transcript-stop-button" id="studyTranscriptStopButton" type="button" disabled aria-label="Stop transcript reading">■</button>
           </div>
@@ -191,12 +190,12 @@
 
       <section class="view" data-view="studies" aria-labelledby="studiesTitle">
         <header class="library-heading"><div><h1 id="studiesTitle">Studies</h1><span id="studyCount">0 studies</span></div><button class="text-button" type="button" data-view-target="connect">+ Add study</button></header>
-        <div class="study-list" id="studyList"></div>
-
-        <section class="retired-words" aria-label="Words removed from practice">
-          <button class="retired-words-toggle" id="retiredWordsToggle" type="button" aria-expanded="false" aria-controls="retiredWordsPanel"><span>Learned words</span><span aria-hidden="true">⌄</span></button>
-          <div id="retiredWordsPanel" hidden><p>These words are out of practice on this phone. Restore one whenever you want to revisit it.</p><div id="retiredWordsList" class="retired-words-list"></div></div>
-        </section>
+        <div class="library-tabs" role="group" aria-label="Study collection"><button type="button" id="libraryStudiesButton" aria-pressed="true">Studies</button><button id="retiredWordsToggle" type="button" aria-pressed="false">Learned words</button></div>
+        <div class="library-content">
+          <div class="study-list" id="studyList"></div>
+          <section id="retiredWordsPanel" hidden aria-label="Learned words"><p>Restore a word to practice it again.</p><div id="retiredWordsList" class="retired-words-list"></div></section>
+        </div>
+      </section>
       </section>
 
       <section class="view" data-view="connect" aria-labelledby="connectTitle">
@@ -216,9 +215,9 @@
             <p>Vocabulary, subtitles and your video in one transfer.</p>
           </div>
           <button class="primary-action transfer-paste-button" id="pasteTransferButton" type="button">Paste study</button>
-          <div class="manual-transfer-panel" id="manualTransferPanel" hidden>
-            <label for="manualTransferInput">If automatic paste is unavailable, tap below and use <b>Paste</b>.</label>
-            <textarea id="manualTransferInput" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the LinguaLoop transfer here"></textarea>
+          <div class="manual-transfer-panel" id="manualTransferPanel">
+            <label for="manualTransferInput">Or paste the transfer below.</label>
+            <textarea id="manualTransferInput" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste the LinguaLoop transfer here"></textarea>
             <button class="secondary-action" id="importManualTransferButton" type="button">Import pasted study</button>
           </div>
         </section>
@@ -236,9 +235,10 @@
   <div class="word-undo" id="wordUndo" role="status" hidden><span id="wordUndoText">Word removed from practice.</span><button id="wordUndoButton" type="button">Undo</button></div>
   <dialog id="wordSheet" class="word-sheet" aria-labelledby="wordSheetTitle">
     <header><span>YOUR VOCABULARY</span><button id="wordSheetClose" class="icon-button" type="button" aria-label="Close word">×</button></header>
-    <div class="word-sheet-title"><h2 id="wordSheetTitle"></h2><button id="wordSheetSpeak" class="practice-tool-button listen" type="button" aria-label="Pronounce word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button></div>
+    <section class="word-detail-content"><div class="word-sheet-title"><h2 id="wordSheetTitle"></h2><button id="wordSheetSpeak" class="practice-tool-button listen" type="button" aria-label="Pronounce word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button></div>
     <p id="wordSheetMeaning" class="word-sheet-meaning"></p>
     <p id="wordSheetContext" class="word-sheet-context"></p>
+    </section>
     <button id="wordSheetPractice" class="primary-action full-width" type="button">Practice this word</button>
     <section class="word-practice-panel" id="wordPracticePanel" aria-label="Practice this word" hidden>
       <p class="word-practice-prompt" id="wordPracticePrompt"></p>
@@ -260,6 +260,6 @@
     <div class="dialog-actions"><button class="primary-action full-width" id="confirmRetireWordButton" type="button">Learned · remove</button><button class="secondary-action full-width" id="cancelRetireWordButton" type="button">Keep practicing</button></div>
   </dialog>
   <script src="learning.js?v=2"></script>
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

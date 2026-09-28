@@ -16,12 +16,13 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Automatic session and written-draft recovery after reopening
 - Learned words can be removed from phone practice with confirmation, Undo and permanent access to Restore in Studies
 - Removals and phone progress survive updated desktop imports
-- A compact app layout with inline session controls, stable practice actions and card-level audio
+- Full-screen layouts with the default desktop Dark palette, solid study cards and fixed control positions
+- Always-visible session settings, reserved answer/hint/feedback regions and card-level audio
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
 - Full-video comprehension with active-subtitle following, direct seeking and individual subtitle clips; desktop chains do not affect phone playback
 - Saved words and phrases highlighted throughout the English transcript using their vocabulary colors
-- Tap a marked word for its saved meaning, pronunciation and inline guided practice without leaving the passage
+- Tap a marked word for a full-screen view of its saved meaning and pronunciation, followed by guided practice; closing returns to the same passage
 - Read-only view, English/Spanish/both display and a filter for lines containing saved words
 - Multiple studies stored locally
 - Full-row study switching and protected on-device deletion
@@ -76,6 +77,8 @@ The decoded study pack uses this structure:
 ```
 
 ## Learning and recovery
+
+The screen is the main surface, with no nested decorative panels. Cards keep separate prompt and answer regions; reveal, hints and feedback do not move the card or action buttons. Long content scrolls within its own region. The reader keeps its video and navigation controls fixed while the transcript scrolls. Studies and Learned words are separate fixed tabs, and manual transfer is always available on Add study.
 
 Practice home keeps source, session size and Mixed / Cards / Write / Listen visible together. Select the controls, then Start; an unfinished session has a separate Resume action. Continue reading returns to the active study. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
 
