@@ -10,14 +10,16 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 
 - Bounded daily sessions of 5, 8 or 10 words from the current study or all studies
 - Evidence-aware spacing: same-day repeats and guided practice do not inflate mastery
-- Adaptive recall cards, written contextual recall and listening practice; single-skill sessions remain available
+- Three clear practice choices: Cards, Write and Listen
 - Progressive meaning/spelling hints and a gentle retry before showing the answer
 - A stable session goal with a final pass for difficult words when other words intervene
 - Automatic session and written-draft recovery after reopening
 - Learned words can be removed from phone practice with confirmation, Undo and permanent access to Restore in Studies
 - Removals and phone progress survive updated desktop imports
 - Full-screen layouts with neutral graphite/blue practice and library screens, solid study cards and fixed control positions
-- Always-visible, evenly sized session-setting buttons, reserved answer/hint/feedback regions and card-level audio
+- Compact two-sided cards with a gentle flip, English on the front and Spanish on the back
+- Two recall actions: Need practice and I knew it
+- Always-visible, evenly sized session-setting buttons, stable feedback/control positions and pronunciation on each card face
 - Study rows use a soft background tint matching their imported study color
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
@@ -79,9 +81,9 @@ The decoded study pack uses this structure:
 
 ## Learning and recovery
 
-The screen is the main surface, with no nested decorative panels. Cards keep separate prompt and answer regions; reveal, hints and feedback do not move the card or action buttons. Long content scrolls within its own region. The reader keeps its video and navigation controls fixed while the transcript scrolls. Studies and Learned words are separate fixed tabs, and manual transfer is always available on Add study.
+The screen is the main surface, with no nested decorative panels. Cards show one face at a time. Tap the card to reveal its answer, or tap again to turn back; reveal, hints and feedback do not move the card or action buttons. Listening controls are separate from the flip action. Long content scrolls within each face. The hidden face is also hidden from keyboard focus and assistive technology, and reduced-motion settings disable the flip animation. The reader keeps its video and navigation controls fixed while the transcript scrolls. Studies and Learned words are separate fixed tabs, and manual transfer is always available on Add study.
 
-Practice home keeps source, session size and Mixed / Cards / Write / Listen visible together. Select the controls, then Start; an unfinished session has a separate Resume action. Continue reading returns to the active study. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
+Practice home keeps Cards / Write / Listen, study source and session size visible together. Choose a mode, then Start; an unfinished session has a quiet Continue action. New sessions stay in the chosen mode. Older unfinished mixed sessions can still be completed without losing their progress. Read & listen remains directly available from the bottom navigation. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
 
 The phone stores its unfinished session, typed draft, evidence and progress in the existing local library. Importing the same study preserves these fields by stable study and word IDs. Removing a word as learned archives it locally rather than deleting desktop vocabulary; it disappears from phone practice and transcript vocabulary highlighting. Use Studies → Learned words → Restore to bring it back. Reimports preserve removal records even when a removed word is temporarily absent from the incoming pack.
 

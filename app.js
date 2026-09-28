@@ -14,9 +14,9 @@
     library: { version: 1, activeStudyId: '', studies: [] },
     view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
     practiceRun: 0, practiceReturn: 'today', practiceRetries: {}, practiceAnswers: 0, practiceCorrect: 0,
-    sessionMode: 'adaptive', practiceInitialCount: 0, practiceResults: {}, evidence: null,
+    sessionMode: 'cards', practiceInitialCount: 0, practiceResults: {}, evidence: null,
     reviewScope: readPreference('lingualoop.mobile.reviewScope') === 'all' ? 'all' : 'current',
-    reviewMode: ['adaptive','cards','write','listen'].includes(readPreference('lingualoop.mobile.reviewMode')) ? readPreference('lingualoop.mobile.reviewMode') : 'adaptive',
+    reviewMode: ['cards','write','listen'].includes(readPreference('lingualoop.mobile.reviewMode')) ? readPreference('lingualoop.mobile.reviewMode') : 'cards',
     reviewSize: [5, 8, 10].includes(Number(readPreference('lingualoop.mobile.reviewSize'))) ? Number(readPreference('lingualoop.mobile.reviewSize')) : 5,
     retireTarget: null, retireUndo: null, inlinePractice: null,
     videoExpanded: readPreference('lingualoop.mobile.videoExpanded') !== 'false',
@@ -240,10 +240,10 @@
     els.cardsCount.textContent = cards.length; els.writeCount.textContent = cards.length;
     els.startReview.disabled = !cards.length;
     $('#resumePracticeButton').disabled = !resume;
-    if (!resume) $('#resumePracticeButton span').textContent = 'Resume';
-    if (resume) $('#resumePracticeButton span').textContent = `Resume · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount}`;
+    if (!resume) $('#resumePracticeButton span').textContent = 'No unfinished session';
+    if (resume) $('#resumePracticeButton span').textContent = `Continue · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount}`;
     const batchSize = nextBatch(!due.length).length;
-    els.startReview.querySelector('span').textContent = `${resume ? 'Start new' : due.length ? 'Start' : 'Practice'} · ${batchSize} ${batchSize === 1 ? 'word' : 'words'}`;
+    els.startReview.querySelector('span').textContent = `${resume ? 'Start new' : 'Start'} ${{ cards: 'cards', write: 'writing', listen: 'listening' }[state.reviewMode]} · ${batchSize} ${batchSize === 1 ? 'word' : 'words'}`;
     $('#sessionStatus').textContent = attempts ? `${independent} / ${attempts} recalled without help` : '';
     $$('[data-review-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.reviewScope === state.reviewScope)));
     $$('[data-review-size]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.reviewSize) === state.reviewSize)));
@@ -350,15 +350,15 @@
     state.evidence = remaining[0] === saved.queue[index] ? saved.evidence : null;
     if (currentCard()) { const keepDraft = Boolean(state.evidence); renderPracticeCard(keepDraft); els.writeAnswer.value = keepDraft ? String(saved.input || '') : ''; }
   }
-  function startPractice(mode = 'adaptive', { cardIds = null, returnTo = 'today', extra = false } = {}) {
+  function startPractice(mode = 'cards', { cardIds = null, returnTo = 'today', extra = false } = {}) {
     closeCardClip(); stopSpeech(); resetPractice();
-    state.sessionMode = ['cards','write','listen'].includes(mode) ? mode : 'adaptive';
+    state.sessionMode = ['cards','write','listen'].includes(mode) ? mode : state.reviewMode;
     state.queue = cardIds ? availableCards().filter(card => cardIds.includes(card.id)).map(card => ({ studyId: activeStudy().id, cardId: card.id, extra: true })) : nextBatch(extra);
     if (!state.queue.length && !cardIds) state.queue = nextBatch(true);
     state.practiceInitialCount = state.queue.length; state.practiceReturn = returnTo;
     state.queue.forEach(entry => {
       const card = cardForEntry(entry), context = learning.contextFor(studyForEntry(entry), card, cardIds ? state.wordSheetCueIndex : -1, Number(card.contextRotation) || 0);
-      entry.mode = state.sessionMode === 'adaptive' ? learning.chooseMode(card, Boolean(context), 'speechSynthesis' in window) : state.sessionMode;
+      entry.mode = state.sessionMode;
       if (entry.mode === 'listen' && !('speechSynthesis' in window)) entry.mode = 'write';
       entry.contextIndex = context?.index ?? -1;
     });
@@ -387,50 +387,57 @@
       return;
     }
     stopSpeech(); closeCardClip(); state.practiceMode = entry.mode || 'cards';
-    if (!restore || !state.evidence) state.evidence = { assisted: Boolean(entry.retry), firstCorrect: null, wrongAttempts: 0, hintStep: 0, revealed: false, checked: false, hint: '', feedback: '', feedbackClass: '' };
+    if (!restore || !state.evidence) state.evidence = { assisted: Boolean(entry.retry), firstCorrect: null, wrongAttempts: 0, hintStep: 0, revealed: false, flipped: false, checked: false, hint: '', feedback: '', feedbackClass: '' };
     const writing = state.practiceMode !== 'cards', listening = state.practiceMode === 'listen', context = practiceContext();
-    els.practiceModeLabel.textContent = listening ? 'LISTEN & RECALL' : writing ? 'WRITE IN ENGLISH' : 'RECALL';
-    $('#practiceTitle').textContent = entry.retry ? 'One more look' : 'A few words';
+    els.practiceModeLabel.textContent = listening ? 'HEAR & WRITE' : writing ? 'RECALL IN ENGLISH' : 'FLIP & REMEMBER';
+    $('#practiceTitle').textContent = entry.retry ? 'One more look' : listening ? 'Listen' : writing ? 'Write' : 'Cards';
     $('#practiceStudyName').textContent = studyForEntry(entry)?.name || '';
     els.practiceStage.classList.toggle('writing', writing);
-    els.promptDirection.textContent = listening ? 'LISTEN → ENGLISH' : writing ? (context ? 'COMPLETE THE ENGLISH' : 'SPANISH → ENGLISH') : 'ENGLISH → SPANISH';
+    els.promptDirection.textContent = listening ? 'LISTEN' : writing ? (context ? 'FILL THE GAP' : 'SPANISH') : 'ENGLISH';
+    $('#answerLanguage').textContent = writing ? 'ENGLISH' : 'SPANISH';
+    $('#answerOriginal').textContent = writing ? card.spanish : card.english;
     els.promptText.textContent = listening ? 'Listen, then type the word' : writing ? (context?.masked || card.spanish) : card.english;
     els.promptText.classList.toggle('sentence-prompt', writing && Boolean(context));
     els.promptContext.textContent = listening ? 'Tap Listen as often as you need.' : writing ? (context ? 'Complete the gap. Use a hint whenever you need one.' : '') : (context?.text || card.context);
     els.answerText.textContent = writing ? card.english : card.spanish;
-    els.answerContext.textContent = context?.text || '';
-    els.answerSpeak.querySelector('span').textContent = writing ? 'Answer' : 'Spanish';
+    els.answerContext.textContent = writing ? (context?.text || '') : (context?.index >= 0 ? studyForEntry(entry)?.transcript[context.index]?.es || '' : '');
+    els.answerSpeak.querySelector('span').textContent = 'Listen';
     els.answerSpeak.setAttribute('aria-label', writing ? 'Pronounce the English answer' : 'Pronounce the Spanish answer');
-    els.speak.querySelector('span').textContent = writing ? 'Listen' : 'English';
+    els.speak.querySelector('span').textContent = 'Listen';
     els.speak.setAttribute('aria-label', listening ? 'Listen to the word to recall' : 'Pronounce the English word');
     els.cardContext.disabled = !(learning.indexFor(studyForEntry(entry)).byCard.get(card.id)?.length);
     els.writeForm.hidden = !writing; if (!restore) els.writeAnswer.value = '';
     els.clipButton.hidden = true;
     $$('.prompt-scroll, .answer-scroll').forEach(area => { area.scrollTop = 0; });
+    const rotor = $('#cardRotor'); rotor.classList.add('no-motion');
     restorePracticePresentation();
+    void rotor.offsetWidth; requestAnimationFrame(() => rotor.classList.remove('no-motion'));
   }
   function restorePracticePresentation() {
     if (!currentCard() || !state.evidence) return;
     const evidence = state.evidence, writing = state.practiceMode !== 'cards';
     state.revealed = evidence.revealed;
     $('#answerContent').hidden = !evidence.revealed;
-    $('#answerPlaceholder').hidden = evidence.revealed;
     els.answerSpeak.disabled = !evidence.revealed;
-    els.reveal.disabled = evidence.revealed;
-    els.reveal.textContent = writing ? 'Show answer' : 'Reveal answer';
+    els.reveal.hidden = !writing; els.reveal.disabled = state.ratingPending;
+    const flipped = evidence.revealed && evidence.flipped !== false;
+    $('#cardRotor').classList.toggle('flipped', flipped);
+    $('#cardFront').inert = flipped; $('#cardFront').setAttribute('aria-hidden', String(flipped));
+    els.answerArea.inert = !flipped; els.answerArea.setAttribute('aria-hidden', String(!flipped));
+    els.reveal.textContent = !evidence.revealed ? 'Show answer' : flipped ? 'See question' : 'See answer';
     els.ratingRow.hidden = writing;
     els.ratingRow.querySelectorAll('button').forEach(button => { button.disabled = !evidence.revealed || state.ratingPending; });
     els.ratingRow.querySelector('[data-rating=again] small').textContent = state.queue.slice(state.index + 1).some(item => entryKey(item) !== entryKey(currentEntry())) && !currentEntry()?.retry ? 'One more look' : 'Soon';
     $('#practiceNextButton').hidden = !writing;
     $('#practiceNextButton').disabled = !evidence.revealed || state.ratingPending;
-    $('#practiceRetryButton').hidden = !writing;
+    $('#practiceRetryButton').hidden = true;
     $('#practiceRetryButton').disabled = evidence.revealed || !evidence.wrongAttempts;
     $('#practiceHintButton').disabled = evidence.revealed;
     $('#practiceHintText').textContent = evidence.hint || ''; $('#practiceHintText').title = evidence.hint || '';
     els.writeForm.hidden = !writing;
     els.writeAnswer.disabled = evidence.revealed;
     els.writeForm.querySelector('button').disabled = evidence.revealed;
-    els.writeFeedback.textContent = evidence.feedback || (writing ? 'Write your answer, then check.' : evidence.revealed ? 'How well did you remember?' : 'Recall the meaning first.'); els.writeFeedback.className = evidence.feedbackClass || '';
+    els.writeFeedback.textContent = evidence.feedback || (writing ? 'Write your answer, then check.' : evidence.revealed ? 'Did you remember it?' : 'Think of the meaning, then flip the card.'); els.writeFeedback.className = evidence.feedbackClass || '';
     if (evidence.spelling) {
       const { before, middle, after } = evidence.spelling;
       const detail = document.createElement('span'); detail.className = 'spelling-detail';
@@ -438,11 +445,29 @@
       const mark = document.createElement('mark'); mark.textContent = middle || '▯'; detail.append(mark, document.createTextNode(after));
       els.writeFeedback.append(detail);
     }
-    if (evidence.revealed && !writing) for (const rating of ['hard','good','easy']) {
-      const schedule = learning.reviewSchedule(currentCard(), rating, { assisted: evidence.assisted, correct: true, retry: Boolean(currentEntry()?.retry), mode: state.practiceMode });
-      els.ratingRow.querySelector(`[data-rating="${rating}"] small`).textContent = schedule.days < 1 ? 'Soon' : `${schedule.days} ${schedule.days === 1 ? 'day' : 'days'}`;
+    // Keep a requested hint readable when the keyboard hides the card footer.
+    if (evidence.hint && !evidence.revealed) {
+      const feedback = document.createElement('span');
+      feedback.className = evidence.feedback ? 'practice-feedback-copy' : 'practice-feedback-copy default-feedback';
+      feedback.append(...els.writeFeedback.childNodes);
+      const hint = document.createElement('span');
+      hint.className = 'compact-practice-hint'; hint.textContent = evidence.hint;
+      els.writeFeedback.append(feedback, hint);
+    }
+    if (evidence.revealed && !writing) {
+      const schedule = learning.reviewSchedule(currentCard(), 'good', { assisted: evidence.assisted, correct: true, retry: Boolean(currentEntry()?.retry), mode: state.practiceMode });
+      els.ratingRow.querySelector('[data-rating="good"] small').textContent = schedule.days < 1 ? 'Soon' : `${schedule.days} ${schedule.days === 1 ? 'day' : 'days'}`;
     }
   }
+  function flipPracticeCard() {
+    if (!currentCard() || !state.evidence || state.ratingPending) return;
+    const moveFocus = Boolean(document.activeElement?.closest('#recallCard'));
+    if (!state.evidence.revealed) revealAnswer(true);
+    else { state.evidence.flipped = state.evidence.flipped === false; restorePracticePresentation(); persistSession(); }
+    const faceButton = state.evidence.flipped === false ? $('#cardFrontFlip') : $('#cardBackFlip');
+    if (moveFocus) faceButton.focus({ preventScroll: true });
+  }
+
   function revealAnswer(manual = true) {
     if (!currentCard() || !state.evidence) return;
     const evidence = state.evidence;
@@ -450,7 +475,7 @@
       evidence.assisted = true; if (evidence.firstCorrect === null) evidence.firstCorrect = false;
       evidence.feedback = 'Say it once. We will come back to it.'; evidence.feedbackClass = 'assisted';
     }
-    evidence.revealed = true; els.writeAnswer.blur(); restorePracticePresentation(); persistSession();
+    evidence.revealed = true; evidence.flipped = true; els.writeAnswer.blur(); restorePracticePresentation(); persistSession();
   }
   function showPracticeHint() {
     const card = currentCard(), evidence = state.evidence;
@@ -1567,7 +1592,15 @@
   $('#wordPracticeDone').addEventListener('click', () => { els.wordSheet.close(); $('#wordPracticeAnswer').blur(); });
   let draftTimer;
   els.writeAnswer.addEventListener('input', () => { snapshotSession(); clearTimeout(draftTimer); draftTimer = setTimeout(persistSession, 300); });
-  els.reveal.addEventListener('click', () => revealAnswer(true));
+  els.reveal.addEventListener('click', flipPracticeCard);
+  // Native buttons support keyboard use; dragging/scrolling text must not flip.
+  for (const button of [$('#cardFrontFlip'), $('#cardBackFlip')]) {
+    let gesture = null;
+    button.addEventListener('pointerdown', event => { gesture = { x: event.clientX, y: event.clientY, moved: false }; });
+    button.addEventListener('pointermove', event => { if (gesture && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 8) gesture.moved = true; });
+    button.addEventListener('pointercancel', () => { if (gesture) gesture.moved = true; });
+    button.addEventListener('click', event => { const moved = gesture?.moved; gesture = null; if ((event.detail && moved) || window.getSelection()?.toString()) return; flipPracticeCard(); });
+  }
   els.speak.addEventListener('click', speakCurrent);
   els.answerSpeak.addEventListener('click', speakCurrentAnswer);
   els.clipButton.addEventListener('click', toggleCardClip);

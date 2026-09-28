@@ -10,6 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="practice.css?v=1">
 </head>
 <body data-view="today">
   <div class="app-shell">
@@ -32,50 +33,30 @@
           <article class="study-summary" id="activeStudySummary"></article>
         </section>
         <section class="session-setup" aria-label="Practice session">
-          <div class="session-intro">
-            <p class="ready-count"><span id="dueCount">0</span> <span id="dueUnit">words</span> ready</p>
-            <p id="todayMessage"></p>
-          </div>
-          <div class="setup-row">
-            <span class="setup-label" id="reviewScopeLabel">From</span>
-            <div class="segmented-control" id="reviewScope" role="group" aria-labelledby="reviewScopeLabel">
-              <button type="button" data-review-scope="current" aria-pressed="true">This study</button>
-              <button type="button" data-review-scope="all" aria-pressed="false">All studies</button>
-            </div>
-          </div>
-          <div class="setup-row">
-            <span class="setup-label" id="reviewSizeLabel">Words</span>
-            <div class="segmented-control session-size" id="reviewSize" role="group" aria-labelledby="reviewSizeLabel">
-              <button type="button" data-review-size="5" aria-pressed="true">5</button>
-              <button type="button" data-review-size="8" aria-pressed="false">8</button>
-              <button type="button" data-review-size="10" aria-pressed="false">10</button>
-            </div>
-          </div>
+          <div class="session-intro"><h2>Practice your words</h2><p class="ready-count"><span id="dueCount">0</span> <span id="dueUnit">words</span> ready <span id="todayMessage"></span></p></div>
           <div class="mode-picker">
-            <span class="setup-label" id="reviewModeLabel">Practice</span>
-            <div class="segmented-control practice-modes" role="group" aria-labelledby="reviewModeLabel">
-              <button type="button" data-practice-mode="adaptive" aria-pressed="true">Mixed</button>
-              <button type="button" data-practice-mode="cards" aria-pressed="false">Cards</button>
-              <button type="button" data-practice-mode="write" aria-pressed="false">Write</button>
-              <button type="button" data-practice-mode="listen" aria-pressed="false">Listen</button>
+            <div class="practice-modes" role="group" aria-label="Choose an exercise">
+              <button type="button" data-practice-mode="cards" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="14" height="16" rx="3"/><path d="M3 16V5a3 3 0 0 1 3-3h10M10 11h6m-6 4h4"/></svg><strong>Cards</strong><small>Flip & remember</small></button>
+              <button type="button" data-practice-mode="write" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14zM13 20h8"/></svg><strong>Write</strong><small>Recall in English</small></button>
+              <button type="button" data-practice-mode="listen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="12" width="4" height="8" rx="2"/><rect x="17" y="12" width="4" height="8" rx="2"/></svg><strong>Listen</strong><small>Hear & write</small></button>
             </div>
-            <p id="practiceModeHint">Recall, write and listen in one session.</p>
+            <p id="practiceModeHint" class="sr-only"></p>
+          </div>
+          <div class="session-options">
+            <div class="setup-row"><span class="setup-label" id="reviewScopeLabel">From</span><div class="segmented-control" id="reviewScope" role="group" aria-labelledby="reviewScopeLabel"><button type="button" data-review-scope="current" aria-pressed="true">This study</button><button type="button" data-review-scope="all" aria-pressed="false">All studies</button></div></div>
+            <div class="setup-row"><span class="setup-label" id="reviewSizeLabel">Words</span><div class="segmented-control session-size" id="reviewSize" role="group" aria-labelledby="reviewSizeLabel"><button type="button" data-review-size="5" aria-pressed="true">5</button><button type="button" data-review-size="8" aria-pressed="false">8</button><button type="button" data-review-size="10" aria-pressed="false">10</button></div></div>
           </div>
         </section>
-          <div class="session-launch">
-            <button class="resume-practice text-button" id="resumePracticeButton" type="button" disabled><span>Resume practice</span><span aria-hidden="true">→</span></button>
-            <button class="primary-action" id="startReviewButton" type="button"><span>Start · 5 words</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
-            <p class="session-status" id="sessionStatus" role="status"></p>
-          </div>
-        <button class="continue-reading" id="continueReadingButton" type="button">
-          <span class="reading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2 2-2h6v14h-6l-2 2-2-2H4zM12 7v14"/></svg></span>
-          <span><strong>Continue reading</strong><small id="continueReadingLabel">Return to your study</small></span>
-          <span class="reading-arrow" aria-hidden="true">→</span>
-        </button>
+        <div class="session-launch">
+          <button class="primary-action" id="startReviewButton" type="button"><span>Start cards · 5 words</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+          <button class="resume-practice text-button" id="resumePracticeButton" type="button" disabled><span>Continue saved session</span><span aria-hidden="true">→</span></button>
+          <p class="session-status sr-only" id="sessionStatus" role="status"></p>
+        </div>
+        <button id="continueReadingButton" type="button" hidden><span id="continueReadingLabel"></span></button>
         <div hidden aria-hidden="true"><span id="statDue"></span><span id="statLearning"></span><span id="statStrong"></span><span id="cardsCount"></span><span id="writeCount"></span><span id="retentionValue"></span><div id="progressOrbit"></div></div>
       </section>
 
-      <section class="view" data-view="practice" aria-labelledby="practiceTitle">
+      <section class="view practice-view" data-view="practice" aria-labelledby="practiceTitle">
         <header class="view-header">
           <button class="icon-button" id="practiceBackButton" type="button" aria-label="Leave practice">←</button>
           <div><span class="eyebrow" id="practiceModeLabel">CARDS</span><h1 id="practiceTitle">Daily review</h1></div>
@@ -95,46 +76,29 @@
             <header><div><span>ORIGINAL CLIP</span><strong id="clipTitle">From this study</strong></div><button id="closeClipButton" type="button" aria-label="Close the original video fragment">×</button></header>
             <div class="clip-frame"><iframe id="clipFrame" title="Original YouTube fragment" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>
           </section>
-          <article class="recall-card" id="recallCard">
-            <div class="card-content">
-              <section class="prompt-pane" aria-label="Word to recall">
-                <span class="card-label" id="promptDirection">ENGLISH → SPANISH</span>
-                <div class="prompt-scroll"><h2 id="promptText">Ready?</h2><p id="promptContext"></p></div>
+          <article class="recall-card" id="recallCard" aria-label="Study card">
+            <div class="card-rotor" id="cardRotor">
+              <section class="card-face prompt-pane" id="cardFront" aria-label="Question">
+                <header class="face-header"><span class="card-label" id="promptDirection">ENGLISH</span><button class="practice-tool-button" id="speakButton" type="button" aria-label="Pronounce the English word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Listen</span></button></header>
+                <button class="card-face-turn" id="cardFrontFlip" type="button" aria-label="Flip card to reveal the answer"><span class="prompt-scroll"><strong id="promptText">Ready?</strong><span id="promptContext"></span></span><span class="flip-caption"><span aria-hidden="true">↻</span> Tap to reveal</span></button>
                 <p class="practice-hint-text" id="practiceHintText" role="status"></p>
               </section>
-              <section class="answer-area" id="answerArea" aria-label="Answer">
-                <span class="card-label">ANSWER</span>
-                <div class="answer-scroll"><p id="answerPlaceholder">Reveal to compare.</p><div id="answerContent" hidden><strong id="answerText"></strong><p id="answerContext"></p></div></div>
+              <section class="card-face answer-area" id="answerArea" aria-label="Answer" aria-hidden="true" inert>
+                <header class="face-header"><span class="card-label" id="answerLanguage">SPANISH</span><button class="practice-tool-button" id="answerSpeakButton" type="button" disabled aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Listen</span></button></header>
+                <button class="card-face-turn" id="cardBackFlip" type="button" aria-label="Flip card back to the question"><span class="answer-scroll" id="answerContent" hidden><strong id="answerText"></strong><span id="answerContext"></span></span><span class="flip-caption"><span aria-hidden="true">↻</span> Tap to turn back</span></button>
+                <span class="face-footer" id="answerOriginal"></span>
               </section>
             </div>
-            <div class="card-toolbar">
-              <button class="practice-tool-button listen" id="speakButton" type="button" aria-label="Pronounce the English word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>English</span></button>
-              <button class="practice-tool-button listen" id="answerSpeakButton" type="button" disabled aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Spanish</span></button>
-              <button class="text-button context-link" id="cardContextButton" type="button" disabled aria-label="Find this word in the transcript">Text ↗</button>
-              <button id="clipButton" type="button" hidden aria-label="Play the original video fragment">Clip</button>
-            </div>
+            <button id="clipButton" type="button" hidden aria-label="Play the original video fragment">Clip</button>
           </article>
-
           <div class="practice-actions">
-          <form class="write-form" id="writeForm" hidden>
-            <label class="sr-only" for="writeAnswer">Your English</label>
-            <div><input id="writeAnswer" placeholder="Your English" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
-          </form>
-          <p id="writeFeedback" role="status"></p>
-
-          <button class="primary-action reveal-button" id="revealButton" type="button">Reveal answer</button>
-          <button class="primary-action full-width" id="practiceNextButton" type="button" hidden>Next word →</button>
-          <button class="secondary-action full-width" id="practiceRetryButton" type="button" hidden>Try again</button>
-          <div class="rating-row" id="ratingRow" hidden>
-            <button type="button" data-rating="again"><span>Again</span><small>In this session</small></button>
-            <button type="button" data-rating="hard"><span>Hard</span><small>1 day</small></button>
-            <button type="button" data-rating="good"><span>Good</span><small>3 days</small></button>
-            <button type="button" data-rating="easy"><span>Easy</span><small>7 days</small></button>
-          </div>
-          <div class="practice-secondary-actions">
-            <button class="text-button" id="practiceHintButton" type="button" aria-controls="practiceHintText">Hint</button>
-            <button class="quiet-action practice-retire" id="practiceRetireButton" type="button">Learned · remove</button>
-          </div>
+            <form class="write-form" id="writeForm" hidden><label class="sr-only" for="writeAnswer">Your English</label><div><input id="writeAnswer" placeholder="Type the English…" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div></form>
+            <p id="writeFeedback" role="status"></p>
+            <div class="rating-row" id="ratingRow"><button type="button" data-rating="again"><span>Need practice</span><small>Again later</small></button><button type="button" data-rating="good"><span>I knew it</span><small>Next review</small></button></div>
+            <button class="secondary-action reveal-button" id="revealButton" type="button" hidden>Show answer</button>
+            <button class="primary-action" id="practiceNextButton" type="button" hidden>Next word →</button>
+            <button id="practiceRetryButton" type="button" hidden>Try again</button>
+            <div class="practice-secondary-actions"><button class="text-button" id="practiceHintButton" type="button" aria-controls="practiceHintText">Hint</button><button class="text-button context-link" id="cardContextButton" type="button" disabled aria-label="Find this word in the transcript">In video ↗</button><button class="quiet-action practice-retire" id="practiceRetireButton" type="button">Learned ✓</button></div>
           </div>
         </section>
       </section>
@@ -260,6 +224,6 @@
     <div class="dialog-actions"><button class="primary-action full-width" id="confirmRetireWordButton" type="button">Learned · remove</button><button class="secondary-action full-width" id="cancelRetireWordButton" type="button">Keep practicing</button></div>
   </dialog>
   <script src="learning.js?v=2"></script>
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>
