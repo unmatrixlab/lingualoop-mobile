@@ -1,7 +1,7 @@
 {
   "name": "LinguaLoop Mobile",
   "short_name": "LinguaLoop",
-  "description": "Focused, offline vocabulary practice for LinguaLoop.",
+  "description": "Read and listen to your LinguaLoop studies with vocabulary translations.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

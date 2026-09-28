@@ -12,13 +12,7 @@
 
   const state = {
     library: { version: 1, activeStudyId: '', studies: [] },
-    view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
-    practiceRun: 0, practiceReturn: 'today', practiceRetries: {}, practiceAnswers: 0, practiceCorrect: 0,
-    sessionMode: 'cards', practiceInitialCount: 0, practiceResults: {}, evidence: null,
-    reviewScope: readPreference('lingualoop.mobile.reviewScope') === 'all' ? 'all' : 'current',
-    reviewMode: ['cards','write','listen'].includes(readPreference('lingualoop.mobile.reviewMode')) ? readPreference('lingualoop.mobile.reviewMode') : 'cards',
-    reviewSize: [5, 8, 10].includes(Number(readPreference('lingualoop.mobile.reviewSize'))) ? Number(readPreference('lingualoop.mobile.reviewSize')) : 5,
-    retireTarget: null, retireUndo: null, inlinePractice: null,
+    view: 'video', retireTarget: null, retireUndo: null,
     videoExpanded: readPreference('lingualoop.mobile.videoExpanded') !== 'false',
     wordSheetCardId: '', wordSheetCueIndex: -1, transcriptWordsOnly: false,
     pendingDeleteStudyId: '', pendingDeleteTimer: null, fullVideoStudyId: '',
@@ -41,17 +35,10 @@
     transcriptControls: $('#transcriptControls'), transcriptLastSelection: $('#transcriptLastSelection'),
     transcriptBrowsePosition: $('#transcriptBrowsePosition'), transcriptNavigator: $('#transcriptNavigator'), 
     transcriptJumpForm: $('#transcriptJumpForm'), transcriptJumpInput: $('#transcriptJumpInput'), 
-    wordSheet: $('#wordSheet'), wordSheetTitle: $('#wordSheetTitle'), wordSheetMeaning: $('#wordSheetMeaning'), wordSheetContext: $('#wordSheetContext'), wordSheetSpeak: $('#wordSheetSpeak'), wordSheetPractice: $('#wordSheetPractice'),
-    toggleVideo: $('#toggleStudyVideo'), cardContext: $('#cardContextButton'), practiceSummary: $('#practiceSummary'), practiceDone: $('#practiceDoneButton'),
-    transcriptWords: $('#transcriptWordsButton'), transcriptVocabularyHint: $('#transcriptVocabularyHint'),
-    dueCount: $('#dueCount'), todayDate: $('#todayDate'), todayMessage: $('#todayMessage'), retentionValue: $('#retentionValue'), progressOrbit: $('#progressOrbit'),
-    statDue: $('#statDue'), statLearning: $('#statLearning'), statStrong: $('#statStrong'), cardsCount: $('#cardsCount'), writeCount: $('#writeCount'),
-    activeStudyTitle: $('#activeStudyTitle'), activeStudySummary: $('#activeStudySummary'), studyCount: $('#studyCount'), studyList: $('#studyList'),
-    startReview: $('#startReviewButton'), toast: $('#toast'), pasteTransfer: $('#pasteTransferButton'), manualTransferPanel: $('#manualTransferPanel'), manualTransferInput: $('#manualTransferInput'), importManualTransfer: $('#importManualTransferButton'),
-    practiceModeLabel: $('#practiceModeLabel'), practiceProgress: $('#practiceProgress'), sessionTrackFill: $('#sessionTrackFill'), practiceStage: $('#practiceStage'), practiceEmpty: $('#practiceEmpty'),
-    promptDirection: $('#promptDirection'), promptText: $('#promptText'), promptContext: $('#promptContext'), answerArea: $('#answerArea'), answerText: $('#answerText'), answerContext: $('#answerContext'),
-    reveal: $('#revealButton'), ratingRow: $('#ratingRow'), speak: $('#speakButton'), answerSpeak: $('#answerSpeakButton'), writeForm: $('#writeForm'), writeAnswer: $('#writeAnswer'), writeFeedback: $('#writeFeedback'),
-    clipButton: $('#clipButton'), clipPanel: $('#clipPanel'), clipFrame: $('#clipFrame'), clipTitle: $('#clipTitle'), closeClip: $('#closeClipButton'),
+    wordSheet: $('#wordSheet'), wordSheetTitle: $('#wordSheetTitle'), wordSheetMeaning: $('#wordSheetMeaning'), wordSheetContext: $('#wordSheetContext'), wordSheetSpeak: $('#wordSheetSpeak'),
+    toggleVideo: $('#toggleStudyVideo'), transcriptWords: $('#transcriptWordsButton'), transcriptVocabularyHint: $('#transcriptVocabularyHint'),
+    todayDate: $('#todayDate'), studyCount: $('#studyCount'), studyList: $('#studyList'),
+    toast: $('#toast'), pasteTransfer: $('#pasteTransferButton'), manualTransferPanel: $('#manualTransferPanel'), manualTransferInput: $('#manualTransferInput'), importManualTransfer: $('#importManualTransferButton'),
     studyVideoReady: $('#studyVideoReady'), studyVideoEmpty: $('#studyVideoEmpty'), studyVideoTitle: $('#studyVideoTitle'), studyVideoMeta: $('#studyVideoMeta'), studyVideoFrame: $('#studyVideoFrame'), restartStudyVideo: $('#restartStudyVideoButton'),
     transcriptPanel: $('#studyTranscriptPanel'), transcriptEmpty: $('#studyTranscriptEmpty'), transcriptList: $('#studyTranscriptList'), transcriptSummary: $('#studyTranscriptSummary'), transcriptPosition: $('#studyTranscriptPosition'), transcriptFollow: $('#studyTranscriptFollowButton'), transcriptRead: $('#studyTranscriptReadButton'), transcriptStop: $('#studyTranscriptStopButton'), transcriptSpeed: $('#studyTranscriptSpeed'), transcriptLanguages: $$('[data-transcript-language]')
   };
@@ -132,7 +119,7 @@
   let librarySaveQueue = Promise.resolve();
   function saveLibrary() {
     const snapshot = JSON.parse(JSON.stringify(state.library));
-    // Serialize rapid ratings, imports and position saves in the order requested.
+    // Serialize imports, vocabulary changes and position saves in the order requested.
     librarySaveQueue = librarySaveQueue.then(async () => {
       try {
         const db = await openDb();
@@ -180,27 +167,22 @@
   }
 
   const activeStudy = () => state.library.studies.find(study => study.id === state.library.activeStudyId) || null;
-  const dueCards = (study = activeStudy()) => study ? study.cards.filter(card => !card.retiredAt && (!card.dueAt || card.dueAt <= Date.now())) : [];
-  const allCards = () => state.library.studies.flatMap(study => study.cards.map(card => ({ ...card, studyId: study.id })));
-
   function showView(view, { transcriptIndex = -1 } = {}) {
+    if (!['video', 'studies', 'connect'].includes(view)) view = activeStudy() ? 'video' : 'studies';
     cancelTranscriptPositioning();
     closeTranscriptJump();
     if (state.view !== view) {
       state.transcriptFollowSuspended = false;
     }
     if (els.wordSheet.open) els.wordSheet.close();
-    if (view === 'practice' && !state.queue.length) startPractice(state.practiceMode);
-    if (state.view === 'practice' && view !== 'practice') closeCardClip();
     if (state.view === 'video' && view !== 'video') { captureStudyVideoPosition(true); pauseStudyVideo(); stopTranscriptSpeech(); }
     stopSpeech();
     state.view = view;
     document.body.dataset.view = view;
     updateAppViewport();
-    if (view === 'today' || view === 'studies') render();
-    if (view === 'practice') restorePracticePresentation();
+    if (view === 'studies') render();
     $$('.view').forEach(section => section.classList.toggle('active', section.dataset.view === view));
-    $$('.bottom-nav [data-view-target]').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === view));
+    $$('.bottom-nav [data-view-target]').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === (view === 'connect' ? 'studies' : view)));
     if (view === 'video') {
       const explicitCue = activeTranscript()[transcriptIndex];
       if (explicitCue) {
@@ -216,47 +198,9 @@
   }
 
   function availableCards(study = activeStudy()) { return (study?.cards || []).filter(card => !card.retiredAt); }
-  function scopedStudies() { return state.reviewScope === 'current' ? [activeStudy()].filter(Boolean) : state.library.studies; }
-  function nextBatch(extra = false) {
-    return learning.buildBatch(scopedStudies(), { limit: state.reviewSize, extra });
-  }
   function render() {
-    if (state.index < state.queue.length && !currentCard()) { state.evidence = null; renderPracticeCard(); snapshotSession(); }
-    const study = activeStudy(), cards = scopedStudies().flatMap(item => availableCards(item));
-    const due = scopedStudies().flatMap(item => dueCards(item));
-    const resume = currentCard();
     els.todayDate.textContent = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date());
     els.todayDate.dateTime = new Date().toLocaleDateString('en-CA');
-    els.dueCount.textContent = due.length;
-    $('#dueUnit').textContent = due.length === 1 ? 'word' : 'words';
-    els.todayMessage.textContent = !study ? 'Add a study to begin.' : !cards.length ? 'All learned. Read on, or restore words in Studies.' : !due.length ? 'Caught up · extra practice is available.' : state.reviewScope === 'all' ? `Across ${state.library.studies.length} ${state.library.studies.length === 1 ? 'study' : 'studies'}` : 'From this study';
-    const independent = cards.reduce((sum, card) => sum + (Number(card.independentRecalls) || 0), 0);
-    const attempts = cards.reduce((sum, card) => sum + (Number(card.recallAttempts) || 0), 0);
-    els.retentionValue.textContent = attempts ? `${independent} / ${attempts}` : '—';
-    els.progressOrbit.style.setProperty('--progress', `${attempts ? independent / attempts * 100 : 0}%`);
-    els.statDue.textContent = due.length;
-    els.statLearning.textContent = cards.filter(card => card.stage !== 'strong').length;
-    els.statStrong.textContent = cards.filter(card => card.stage === 'strong').length;
-    els.cardsCount.textContent = cards.length; els.writeCount.textContent = cards.length;
-    els.startReview.disabled = !cards.length;
-    $('#resumePracticeButton').disabled = !resume;
-    if (!resume) $('#resumePracticeButton span').textContent = 'No unfinished session';
-    if (resume) $('#resumePracticeButton span').textContent = `Continue · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount}`;
-    const batchSize = nextBatch(!due.length).length;
-    els.startReview.querySelector('span').textContent = `${resume ? 'Start new' : 'Start'} ${{ cards: 'cards', write: 'writing', listen: 'listening' }[state.reviewMode]} · ${batchSize} ${batchSize === 1 ? 'word' : 'words'}`;
-    $('#sessionStatus').textContent = attempts ? `${independent} / ${attempts} recalled without help` : '';
-    $$('[data-review-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.reviewScope === state.reviewScope)));
-    $$('[data-review-size]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.reviewSize) === state.reviewSize)));
-    $$('[data-practice-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.practiceMode === state.reviewMode)));
-    $('#practiceModeHint').textContent = { adaptive: 'Recall, write and listen in one session.', cards: 'Recall the meaning, then reveal it.', write: 'Complete a sentence or write the English.', listen: 'Hear the word, then write it in English.' }[state.reviewMode];
-    $('#continueReadingButton').disabled = !study || !(study.transcript?.length || study.media);
-    $('#continueReadingLabel').textContent = study ? `This study · ${formatClipTime(study.mobilePlayback?.time || 0)}` : 'Add a study first';
-    els.activeStudyTitle.textContent = study?.name || 'No study yet';
-    els.activeStudySummary.innerHTML = study ? `<div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div><div><strong>${escapeHtml(study.name)}</strong><small>${availableCards(study).length} words · ${(study.transcript || []).length} subtitles</small></div><span>Change →</span>` : '<div class="study-swatch"></div><div><strong>Connect LinguaLoop 3</strong><small>Load your first study from the computer.</small></div><span>Connect →</span>';
-    els.activeStudySummary.dataset.viewTarget = study ? 'studies' : 'connect';
-    els.activeStudySummary.tabIndex = 0; els.activeStudySummary.setAttribute('role', 'button');
-    els.activeStudySummary.setAttribute('aria-label', study ? `Manage studies. ${study.name} is active.` : 'Connect your first LinguaLoop study');
-    els.activeStudySummary.classList.add('interactive');
     renderStudies(); renderRetiredWords();
   }
 
@@ -270,7 +214,7 @@
       return `<article class="${active ? 'active' : ''}${confirming ? ' confirming-delete' : ''}" data-study-id="${escapeHtml(study.id)}" style="--study-color:${studyColor}">
         <button class="study-select-button" type="button" data-study-open="${escapeHtml(study.id)}" aria-pressed="${active}" aria-label="${active ? 'Active study' : 'Use'} ${escapeHtml(study.name)}">
           <span class="study-swatch" style="background:var(--study-color)"></span>
-          <span class="study-list-copy"><strong>${escapeHtml(study.name)}</strong><small>${availableCards(study).length} words · ${(study.transcript || []).length} subtitles · ${dueCards(study).length} due</small></span>
+          <span class="study-list-copy"><strong>${escapeHtml(study.name)}</strong><small>${availableCards(study).length} words · ${(study.transcript || []).length} subtitles</small></span>
           <span class="study-active-state">${active ? 'ACTIVE' : 'USE'}</span>
         </button>
         <button class="study-delete-button" type="button" data-study-delete="${escapeHtml(study.id)}" aria-label="${confirming ? 'Confirm deleting' : 'Delete'} ${escapeHtml(study.name)}">
@@ -305,245 +249,11 @@
     captureStudyVideoPosition(false); stopSpeech(); destroyStudyVideo();
     state.library.studies = state.library.studies.filter(item => item.id !== studyId);
     if (state.library.activeStudyId === studyId) state.library.activeStudyId = state.library.studies[0]?.id || '';
-    snapshotSession(); loadPracticeSession(); snapshotSession();
-    if (!await saveLibrary()) { state.library = previousLibrary; loadPracticeSession(); render(); return; }
+    if (!await saveLibrary()) { state.library = previousLibrary; render(); return; }
     render();
     if (state.view === 'video') renderStudyVideo();
     showToast(`${study.name} removed from this phone`);
     if (!state.library.studies.length) showView('connect');
-  }
-
-  function resetPractice() {
-    state.practiceRun += 1; state.queue = []; state.index = 0;
-    state.practiceRetries = {}; state.practiceResults = {}; state.evidence = null;
-    state.practiceReturn = 'today'; state.practiceInitialCount = 0;
-    delete state.library.practiceSession;
-  }
-  function entryKey(entry) { return JSON.stringify([entry.studyId, entry.cardId]); }
-  function currentEntry() { return state.queue[state.index]; }
-  function studyForEntry(entry = currentEntry()) { return state.library.studies.find(study => study.id === entry?.studyId); }
-  function cardForEntry(entry) { return studyForEntry(entry)?.cards.find(card => card.id === entry?.cardId && !card.retiredAt); }
-  function currentCard() { return cardForEntry(currentEntry()); }
-  function snapshotSession() {
-    if (!state.queue.length) return;
-    state.library.practiceSession = {
-      version: 2, queue: state.queue, index: state.index, mode: state.sessionMode,
-      total: state.practiceInitialCount, results: state.practiceResults, retries: state.practiceRetries,
-      returnTo: state.practiceReturn, returnCue: state.wordSheetCueIndex,
-      evidence: state.evidence, input: state.evidence ? els.writeAnswer.value : '', updatedAt: Date.now()
-    };
-  }
-  function persistSession() { snapshotSession(); return saveLibrary(); }
-  function loadPracticeSession() {
-    const saved = state.library.practiceSession;
-    if (saved?.version !== 2 || !Array.isArray(saved.queue) || saved.queue.length > 100) return;
-    const index = Math.max(0, Math.min(saved.queue.length, Number(saved.index) || 0));
-    const before = saved.queue.slice(0, index).filter(cardForEntry);
-    const remaining = saved.queue.slice(index).filter(cardForEntry);
-    state.queue = before.concat(remaining); state.index = before.length;
-    state.sessionMode = ['adaptive','cards','write','listen'].includes(saved.mode) ? saved.mode : 'adaptive';
-    state.practiceInitialCount = Math.max(1, Number(saved.total) || new Set(state.queue.map(entryKey)).size);
-    state.practiceResults = saved.results && typeof saved.results === 'object' ? saved.results : {};
-    state.practiceRetries = saved.retries && typeof saved.retries === 'object' ? saved.retries : {};
-    state.practiceReturn = saved.returnTo === 'video' ? 'video' : 'today';
-    if (state.practiceReturn === 'video') state.wordSheetCueIndex = Number(saved.returnCue) || 0;
-    state.evidence = remaining[0] === saved.queue[index] ? saved.evidence : null;
-    if (currentCard()) { const keepDraft = Boolean(state.evidence); renderPracticeCard(keepDraft); els.writeAnswer.value = keepDraft ? String(saved.input || '') : ''; }
-  }
-  function startPractice(mode = 'cards', { cardIds = null, returnTo = 'today', extra = false } = {}) {
-    closeCardClip(); stopSpeech(); resetPractice();
-    state.sessionMode = ['cards','write','listen'].includes(mode) ? mode : state.reviewMode;
-    state.queue = cardIds ? availableCards().filter(card => cardIds.includes(card.id)).map(card => ({ studyId: activeStudy().id, cardId: card.id, extra: true })) : nextBatch(extra);
-    if (!state.queue.length && !cardIds) state.queue = nextBatch(true);
-    state.practiceInitialCount = state.queue.length; state.practiceReturn = returnTo;
-    state.queue.forEach(entry => {
-      const card = cardForEntry(entry), context = learning.contextFor(studyForEntry(entry), card, cardIds ? state.wordSheetCueIndex : -1, Number(card.contextRotation) || 0);
-      entry.mode = state.sessionMode;
-      if (entry.mode === 'listen' && !('speechSynthesis' in window)) entry.mode = 'write';
-      entry.contextIndex = context?.index ?? -1;
-    });
-    renderPracticeCard(); persistSession();
-  }
-  function practiceContext() {
-    const entry = currentEntry();
-    return learning.contextFor(studyForEntry(entry), currentCard(), entry?.contextIndex ?? -1);
-  }
-  function renderPracticeCard(restore = false) {
-    // Retired or removed cards never hold up a previously saved session.
-    while (state.index < state.queue.length && !currentCard()) state.index += 1;
-    const card = currentCard(), entry = currentEntry();
-    els.practiceEmpty.hidden = Boolean(card); els.practiceStage.hidden = !card;
-    const completed = Object.keys(state.practiceResults).length;
-    els.practiceProgress.textContent = entry?.retry ? 'Another look' : `${Math.min(completed + (card ? 1 : 0), state.practiceInitialCount)} / ${state.practiceInitialCount}`;
-    els.sessionTrackFill.style.width = state.practiceInitialCount ? `${Math.min(100, completed / state.practiceInitialCount * 100)}%` : '100%';
-    if (!card) {
-      closeCardClip(); stopSpeech();
-      const results = Object.values(state.practiceResults).filter(result => !result.removed), recalled = results.filter(result => result.independent).length;
-      els.practiceEmpty.querySelector('h2').textContent = results.length ? 'A good place to pause' : 'No words to review';
-      els.practiceSummary.textContent = results.length ? `${recalled} recalled without help · ${results.length - recalled} to revisit. Your progress is saved.` : 'Read a little, or restore a learned word in Studies.';
-      els.practiceDone.textContent = state.practiceReturn === 'video' ? 'Continue reading' : 'Back to practice';
-      $('#practiceContinueButton').disabled = !scopedStudies().some(study => availableCards(study).length);
-      $('#practiceContinueButton').textContent = nextBatch().length ? `Continue · ${nextBatch().length} words` : 'Optional extra practice';
-      return;
-    }
-    stopSpeech(); closeCardClip(); state.practiceMode = entry.mode || 'cards';
-    if (!restore || !state.evidence) state.evidence = { assisted: Boolean(entry.retry), firstCorrect: null, wrongAttempts: 0, hintStep: 0, revealed: false, flipped: false, checked: false, hint: '', feedback: '', feedbackClass: '' };
-    const writing = state.practiceMode !== 'cards', listening = state.practiceMode === 'listen', context = practiceContext();
-    els.practiceModeLabel.textContent = listening ? 'HEAR & WRITE' : writing ? 'RECALL IN ENGLISH' : 'FLIP & REMEMBER';
-    $('#practiceTitle').textContent = entry.retry ? 'One more look' : listening ? 'Listen' : writing ? 'Write' : 'Cards';
-    $('#practiceStudyName').textContent = studyForEntry(entry)?.name || '';
-    els.practiceStage.classList.toggle('writing', writing);
-    els.promptDirection.textContent = listening ? 'LISTEN' : writing ? (context ? 'FILL THE GAP' : 'SPANISH') : 'ENGLISH';
-    $('#answerLanguage').textContent = writing ? 'ENGLISH' : 'SPANISH';
-    $('#answerOriginal').textContent = writing ? card.spanish : card.english;
-    els.promptText.textContent = listening ? 'Listen, then type the word' : writing ? (context?.masked || card.spanish) : card.english;
-    els.promptText.classList.toggle('sentence-prompt', writing && Boolean(context));
-    els.promptContext.textContent = listening ? 'Tap Listen as often as you need.' : writing ? (context ? 'Complete the gap. Use a hint whenever you need one.' : '') : (context?.text || card.context);
-    els.answerText.textContent = writing ? card.english : card.spanish;
-    els.answerContext.textContent = writing ? (context?.text || '') : (context?.index >= 0 ? studyForEntry(entry)?.transcript[context.index]?.es || '' : '');
-    els.answerSpeak.querySelector('span').textContent = 'Listen';
-    els.answerSpeak.setAttribute('aria-label', writing ? 'Pronounce the English answer' : 'Pronounce the Spanish answer');
-    els.speak.querySelector('span').textContent = 'Listen';
-    els.speak.setAttribute('aria-label', listening ? 'Listen to the word to recall' : 'Pronounce the English word');
-    els.cardContext.disabled = !(learning.indexFor(studyForEntry(entry)).byCard.get(card.id)?.length);
-    els.writeForm.hidden = !writing; if (!restore) els.writeAnswer.value = '';
-    els.clipButton.hidden = true;
-    $$('.prompt-scroll, .answer-scroll').forEach(area => { area.scrollTop = 0; });
-    const rotor = $('#cardRotor'); rotor.classList.add('no-motion');
-    restorePracticePresentation();
-    void rotor.offsetWidth; requestAnimationFrame(() => rotor.classList.remove('no-motion'));
-  }
-  function restorePracticePresentation() {
-    if (!currentCard() || !state.evidence) return;
-    const evidence = state.evidence, writing = state.practiceMode !== 'cards';
-    state.revealed = evidence.revealed;
-    $('#answerContent').hidden = !evidence.revealed;
-    els.answerSpeak.disabled = !evidence.revealed;
-    els.reveal.hidden = !writing; els.reveal.disabled = state.ratingPending;
-    const flipped = evidence.revealed && evidence.flipped !== false;
-    $('#cardRotor').classList.toggle('flipped', flipped);
-    $('#cardFront').inert = flipped; $('#cardFront').setAttribute('aria-hidden', String(flipped));
-    els.answerArea.inert = !flipped; els.answerArea.setAttribute('aria-hidden', String(!flipped));
-    els.reveal.textContent = !evidence.revealed ? 'Show answer' : flipped ? 'See question' : 'See answer';
-    els.ratingRow.hidden = writing;
-    els.ratingRow.querySelectorAll('button').forEach(button => { button.disabled = !evidence.revealed || state.ratingPending; });
-    els.ratingRow.querySelector('[data-rating=again] small').textContent = state.queue.slice(state.index + 1).some(item => entryKey(item) !== entryKey(currentEntry())) && !currentEntry()?.retry ? 'One more look' : 'Soon';
-    $('#practiceNextButton').hidden = !writing;
-    $('#practiceNextButton').disabled = !evidence.revealed || state.ratingPending;
-    $('#practiceRetryButton').hidden = true;
-    $('#practiceRetryButton').disabled = evidence.revealed || !evidence.wrongAttempts;
-    $('#practiceHintButton').disabled = evidence.revealed;
-    $('#practiceHintText').textContent = evidence.hint || ''; $('#practiceHintText').title = evidence.hint || '';
-    els.writeForm.hidden = !writing;
-    els.writeAnswer.disabled = evidence.revealed;
-    els.writeForm.querySelector('button').disabled = evidence.revealed;
-    els.writeFeedback.textContent = evidence.feedback || (writing ? 'Write your answer, then check.' : evidence.revealed ? 'Did you remember it?' : 'Think of the meaning, then flip the card.'); els.writeFeedback.className = evidence.feedbackClass || '';
-    if (evidence.spelling) {
-      const { before, middle, after } = evidence.spelling;
-      const detail = document.createElement('span'); detail.className = 'spelling-detail';
-      detail.append(document.createTextNode(' Check: ' + before));
-      const mark = document.createElement('mark'); mark.textContent = middle || '▯'; detail.append(mark, document.createTextNode(after));
-      els.writeFeedback.append(detail);
-    }
-    // Keep a requested hint readable when the keyboard hides the card footer.
-    if (evidence.hint && !evidence.revealed) {
-      const feedback = document.createElement('span');
-      feedback.className = evidence.feedback ? 'practice-feedback-copy' : 'practice-feedback-copy default-feedback';
-      feedback.append(...els.writeFeedback.childNodes);
-      const hint = document.createElement('span');
-      hint.className = 'compact-practice-hint'; hint.textContent = evidence.hint;
-      els.writeFeedback.append(feedback, hint);
-    }
-    if (evidence.revealed && !writing) {
-      const schedule = learning.reviewSchedule(currentCard(), 'good', { assisted: evidence.assisted, correct: true, retry: Boolean(currentEntry()?.retry), mode: state.practiceMode });
-      els.ratingRow.querySelector('[data-rating="good"] small').textContent = schedule.days < 1 ? 'Soon' : `${schedule.days} ${schedule.days === 1 ? 'day' : 'days'}`;
-    }
-  }
-  function flipPracticeCard() {
-    if (!currentCard() || !state.evidence || state.ratingPending) return;
-    const moveFocus = Boolean(document.activeElement?.closest('#recallCard'));
-    if (!state.evidence.revealed) revealAnswer(true);
-    else { state.evidence.flipped = state.evidence.flipped === false; restorePracticePresentation(); persistSession(); }
-    const faceButton = state.evidence.flipped === false ? $('#cardFrontFlip') : $('#cardBackFlip');
-    if (moveFocus) faceButton.focus({ preventScroll: true });
-  }
-
-  function revealAnswer(manual = true) {
-    if (!currentCard() || !state.evidence) return;
-    const evidence = state.evidence;
-    if (manual && state.practiceMode !== 'cards') {
-      evidence.assisted = true; if (evidence.firstCorrect === null) evidence.firstCorrect = false;
-      evidence.feedback = 'Say it once. We will come back to it.'; evidence.feedbackClass = 'assisted';
-    }
-    evidence.revealed = true; evidence.flipped = true; els.writeAnswer.blur(); restorePracticePresentation(); persistSession();
-  }
-  function showPracticeHint() {
-    const card = currentCard(), evidence = state.evidence;
-    if (!card || evidence.revealed) return;
-    evidence.assisted = true; evidence.hintStep += 1;
-    if (state.practiceMode === 'cards') evidence.hint = `Meaning starts with: ${[...card.spanish][0] || ''}…`;
-    else evidence.hint = evidence.hintStep === 1 ? `Meaning: ${card.spanish}` : `Starts with: ${[...card.english].slice(0, Math.min(2, [...card.english].length - 1)).join('')}…`;
-    restorePracticePresentation(); persistSession();
-  }
-  function checkWrittenAnswer(event) {
-    event.preventDefault(); const card = currentCard(), evidence = state.evidence;
-    if (!card || evidence.revealed) return;
-    if (!els.writeAnswer.value.trim()) { evidence.feedback = 'Try a word, or ask for a hint.'; restorePracticePresentation(); return; }
-    const result = learning.assessAnswer(els.writeAnswer.value, card.english, card.alternatives || []);
-    if (evidence.firstCorrect === null) evidence.firstCorrect = result.correct;
-    evidence.checked = true; delete evidence.spelling;
-    if (result.correct) {
-      evidence.feedback = evidence.assisted || evidence.wrongAttempts ? 'You got it with a little help. Say the full sentence.' : 'You remembered it. Now say the full sentence.';
-      evidence.feedbackClass = 'correct'; revealAnswer(false);
-    } else {
-      evidence.wrongAttempts += 1;
-      if (result.near) {
-        const typed = [...els.writeAnswer.value.trim()], target = [...card.english];
-        let left = 0, right = 0;
-        while (left < typed.length && left < target.length && typed[left].toLowerCase() === target[left].toLowerCase()) left++;
-        while (right < typed.length - left && right < target.length - left && typed[typed.length-1-right].toLowerCase() === target[target.length-1-right].toLowerCase()) right++;
-        evidence.spelling = { before: typed.slice(0,left).join(''), middle: typed.slice(left,typed.length-right).join(''), after: right ? typed.slice(-right).join('') : '' };
-      }
-      evidence.feedback = result.near ? 'Nearly there. Check the spelling and try once more.' : 'Not quite yet. Try again, ask for a hint, or see the answer.';
-      evidence.feedbackClass = 'incorrect'; restorePracticePresentation(); persistSession();
-    }
-  }
-  async function rateCard(rating) {
-    const card = currentCard(), entry = currentEntry(), evidence = state.evidence;
-    if (!card || !evidence?.revealed || state.ratingPending || !['again','hard','good','easy'].includes(rating)) return;
-    const run = state.practiceRun, key = entryKey(entry);
-    state.ratingPending = true;
-    const previousCard = { ...card }, previousSession = JSON.parse(JSON.stringify({ queue: state.queue, index: state.index, results: state.practiceResults, retries: state.practiceRetries }));
-    $$('.rating-row button, #practiceNextButton').forEach(button => { button.disabled = true; });
-    try {
-      const correct = state.practiceMode === 'cards' ? rating !== 'again' : evidence.firstCorrect === true;
-      const assisted = evidence.assisted || rating === 'hard' || evidence.wrongAttempts > 0;
-      const independent = correct && !assisted && !entry.retry;
-      const schedule = learning.reviewSchedule(card, correct ? (assisted ? 'hard' : rating) : 'again', { correct, assisted, retry: Boolean(entry.retry), mode: state.practiceMode });
-      Object.assign(card, schedule); delete card.days; delete card.delay;
-      card.dueAt = Date.now() + schedule.delay; card.reviews += 1;
-      card.correct += independent ? 1 : 0; card.lastRating = rating;
-      if (!entry.retry) {
-        card.recallAttempts = (Number(card.recallAttempts) || 0) + 1;
-        card.independentRecalls = (Number(card.independentRecalls) || 0) + (independent ? 1 : 0);
-        card.assistedRecalls = (Number(card.assistedRecalls) || 0) + (assisted ? 1 : 0);
-        card.contextRotation = (Number(card.contextRotation) || 0) + 1;
-        state.practiceResults[key] = { independent };
-      }
-      if (!independent && !entry.retry) {
-        // A separate final pass keeps the original goal fixed; never repeat a word immediately.
-        const otherRemaining = state.queue.slice(state.index + 1).some(item => entryKey(item) !== key);
-        if (otherRemaining) state.queue.push({ ...entry, retry: true });
-      }
-      state.index += 1; state.evidence = null; snapshotSession();
-      if (!await saveLibrary()) {
-        Object.keys(card).forEach(field => { if (!(field in previousCard)) delete card[field]; }); Object.assign(card, previousCard);
-        state.queue = previousSession.queue; state.index = previousSession.index; state.practiceResults = previousSession.results; state.practiceRetries = previousSession.retries; state.evidence = evidence; snapshotSession();
-        return;
-      }
-      if (run !== state.practiceRun) return;
-      renderPracticeCard(); snapshotSession(); await saveLibrary(); render();
-    } finally { state.ratingPending = false; restorePracticePresentation(); }
   }
 
   function openVocabularyWord(cardId, cueIndex) {
@@ -551,40 +261,18 @@
     if (!card) return;
     captureStudyVideoPosition(true); pauseStudyVideo(); stopSpeech();
     state.wordSheetCardId = cardId; state.wordSheetCueIndex = cueIndex;
-    state.inlinePractice = null;
-    els.wordSheet.dataset.situation = 'lookup';
     els.wordSheet.setAttribute('aria-labelledby', 'wordSheetTitle'); els.wordSheet.removeAttribute('aria-label');
-    $('#wordPracticePanel').hidden = true; els.wordSheetPractice.hidden = false;
     els.wordSheetTitle.hidden = false; els.wordSheetMeaning.hidden = false; els.wordSheetContext.hidden = false;
     els.wordSheetSpeak.hidden = false;
     $('#wordRetireButton').disabled = Boolean(card.retiredAt);
-    els.wordSheet.style.setProperty('--word-color', learning.colors[learning.colorIndex(card)]);
     els.wordSheetTitle.textContent = card.english; els.wordSheetMeaning.textContent = card.spanish;
     els.wordSheetContext.textContent = activeTranscript()[cueIndex]?.en || learning.contextFor(activeStudy(), card)?.text || '';
     if (!els.wordSheet.open) els.wordSheet.showModal();
   }
 
-  function returnFromPractice() {
-    const view = state.practiceReturn;
-    showView(view, { transcriptIndex: view === 'video' ? state.wordSheetCueIndex : -1 });
-  }
-
-  function findCardInTranscript() {
-    const card = currentCard();
-    const study = studyForEntry(), context = practiceContext();
-    const index = context?.index >= 0 ? context.index : learning.indexFor(study).byCard.get(card?.id)?.[0];
-    if (!Number.isInteger(index)) return;
-    if (state.evidence && !state.evidence.revealed) { state.evidence.assisted = true; persistSession(); }
-    if (study && study.id !== state.library.activeStudyId) {
-      captureStudyVideoPosition(false); destroyStudyVideo(); state.library.activeStudyId = study.id; state.transcriptStudyId = '';
-    }
-    state.transcriptWordsOnly = false; saveLibrary();
-    showView('video', { transcriptIndex: index });
-  }
-
   function stopSpeech() {
     if ('speechSynthesis' in window) speechSynthesis.cancel();
-    $$('.practice-tool-button.speaking').forEach(button => { button.classList.remove('speaking'); button.setAttribute('aria-pressed', 'false'); });
+    $$('.word-pronounce.speaking').forEach(button => { button.classList.remove('speaking'); button.setAttribute('aria-pressed', 'false'); });
     clearTranscriptSpeechState();
   }
 
@@ -592,7 +280,6 @@
     if (!text || !('speechSynthesis' in window)) { showToast('Speech is unavailable on this device'); return; }
     if (button?.classList.contains('speaking')) { stopSpeech(); return; }
     stopSpeech();
-    const entryAtSpeechStart = currentEntry();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = language;
     utterance.rate = .9;
@@ -605,56 +292,15 @@
     utterance.onerror = event => {
       finish();
       if (['interrupted', 'canceled'].includes(event.error)) return;
-      if (button === els.speak && state.view === 'practice' && state.practiceMode === 'listen' && currentEntry() === entryAtSpeechStart && !state.evidence?.revealed) {
-        entryAtSpeechStart.mode = 'write'; renderPracticeCard(true); persistSession();
-        showToast('Voice is unavailable. You can practice this word in writing.');
-      } else showToast('Voice is unavailable. Your study is still here.');
+      showToast('Voice is unavailable. Your study is still here.');
     };
     speechSynthesis.speak(utterance);
-  }
-
-  function speakCurrent() {
-    const card = currentCard();
-    if (card) {
-      if (state.practiceMode === 'write' && state.evidence && !state.evidence.revealed) { state.evidence.assisted = true; persistSession(); }
-      speakText(card.english, 'en-US', els.speak);
-    }
-  }
-
-  function speakCurrentAnswer() {
-    const card = currentCard();
-    if (card) speakText(state.practiceMode !== 'cards' ? card.english : card.spanish, state.practiceMode !== 'cards' ? 'en-US' : 'es-US', els.answerSpeak);
-  }
-
-  function currentCardClip() {
-    const study = activeStudy();
-    const clip = normalizeClip(currentCard()?.clip);
-    return study?.media?.type === 'youtube' && clip ? clip : null;
   }
 
   function formatClipTime(value) {
     const seconds = Math.max(0, Math.floor(Number(value) || 0));
     const minutes = Math.floor(seconds / 60);
     return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
-  }
-
-  function closeCardClip() {
-    if (!els.clipPanel) return;
-    els.clipFrame.removeAttribute('src');
-    els.clipPanel.hidden = true;
-    els.clipButton?.setAttribute('aria-pressed', 'false');
-  }
-
-  function toggleCardClip() {
-    if (!els.clipPanel.hidden) { closeCardClip(); return; }
-    const study = activeStudy();
-    const clip = currentCardClip();
-    if (!study?.media || !clip) return;
-    const start = Math.max(0, Math.floor(clip.start));
-    const end = Math.max(start + 1, Math.ceil(clip.end));
-    els.clipFrame.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(study.media.id)}?autoplay=1&start=${start}&end=${end}&controls=1&playsinline=1&rel=0&cc_load_policy=0&iv_load_policy=3`;
-    els.clipPanel.hidden = false;
-    els.clipButton.setAttribute('aria-pressed', 'true');
   }
 
   let youtubeApiPromise = null;
@@ -1124,7 +770,6 @@
   }
 
   function configuredUtterance(text, language) {
-    const entryAtSpeechStart = currentEntry();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = language;
     utterance.rate = Math.max(.6, Math.min(1.25, Number(state.transcriptSpeed) || .9));
@@ -1328,30 +973,26 @@
     $('#retiredWordsList').innerHTML = words.length ? words.map(({ study, card }) => `<article class="retired-word"><div><strong>${escapeHtml(card.english)}</strong><small>${escapeHtml(study.name)}</small></div><button type="button" class="text-button" data-restore-study="${escapeHtml(study.id)}" data-restore-word="${escapeHtml(card.id)}">Restore</button></article>`).join('') : '<p class="muted">Words you remove as learned will stay here, ready to restore.</p>';
   }
   function requestRetireWord(study, card) {
-    if (!study || !card || state.ratingPending) return;
+    if (!study || !card) return;
     state.retireTarget = { studyId: study.id, cardId: card.id };
     $('#retireWordName').textContent = card.english;
     $('#retireWordDialog').showModal();
   }
   async function confirmRetireWord() {
-    const target = state.retireTarget, study = studyForEntry(target), card = study?.cards.find(item => item.id === target?.cardId);
+    const target = state.retireTarget, study = state.library.studies.find(item => item.id === target?.studyId), card = study?.cards.find(item => item.id === target?.cardId);
     if (!card || state.retiring) return;
     state.retiring = true; $('#confirmRetireWordButton').disabled = true;
     const previous = Number(card.retiredAt) || 0;
     try {
-      const wasCurrent = currentEntry() && entryKey(currentEntry()) === entryKey(target);
       card.retiredAt = Date.now();
       if (!await saveLibrary()) { card.retiredAt = previous; return; }
       state.retireUndo = { ...target, english: card.english };
       study.cards = [...study.cards];
       $('#retireWordDialog').close();
       if (els.wordSheet.open) els.wordSheet.close();
-      $('#wordUndoText').textContent = `${card.english} removed from practice`;
+      $('#wordUndoText').textContent = `${card.english} marked as learned`;
       $('#wordUndo').hidden = false;
       clearTimeout(state.undoTimer); state.undoTimer = setTimeout(() => { $('#wordUndo').hidden = true; }, 12000);
-      if (state.queue.some(entry => entryKey(entry) === entryKey(target))) state.practiceResults[entryKey(target)] = { removed: true };
-      if (wasCurrent && !currentCard()) { state.evidence = null; renderPracticeCard(); }
-      await persistSession();
       render(); if (state.view === 'video') { renderStudyTranscript(); restoreTranscriptViewport(); }
     } finally { state.retiring = false; $('#confirmRetireWordButton').disabled = false; }
   }
@@ -1364,47 +1005,8 @@
     study.cards = [...study.cards]; render();
     if (state.view === 'video') renderStudyTranscript();
     if (state.retireUndo?.studyId === studyId && state.retireUndo.cardId === cardId) { state.retireUndo = null; $('#wordUndo').hidden = true; }
-    showToast(`${card.english} restored to practice`);
+    showToast(`${card.english} restored to vocabulary`);
   }
-  function startInlinePractice() {
-    const study = activeStudy(), card = study?.cards.find(item => item.id === state.wordSheetCardId && !item.retiredAt);
-    if (!card) return;
-    stopSpeech();
-    const context = learning.contextFor(study, card, state.wordSheetCueIndex);
-    // The word was already visible in the lookup: this is guided practice, not an independent test.
-    state.inlinePractice = { studyId: study.id, cardId: card.id, answered: false, revealed: false };
-    els.wordSheet.dataset.situation = 'practice';
-    els.wordSheet.setAttribute('aria-label', 'Practice the word in context');
-    els.wordSheet.removeAttribute('aria-labelledby');
-    els.wordSheetTitle.hidden = true; els.wordSheetMeaning.hidden = true; els.wordSheetContext.hidden = true; els.wordSheetSpeak.hidden = true;
-    els.wordSheetPractice.hidden = true; $('#wordPracticePanel').hidden = false;
-    $('#wordPracticePrompt').textContent = context?.masked || card.spanish;
-    $('#wordPracticeAnswer').value = ''; $('#wordPracticeAnswer').disabled = false;
-    $('#wordPracticeForm').querySelector('[type="submit"]').disabled = false;
-    $('#wordPracticeFeedback').textContent = 'A quick practice, then back to your reading.';
-    $('#wordPracticeDone').textContent = 'Continue reading';
-    $('#wordPracticeHint').disabled = false; $('#wordPracticeReveal').disabled = false;
-    $('#wordPracticeAnswer').focus({ preventScroll: true });
-  }
-  async function finishInlinePractice(revealed = false) {
-    const session = state.inlinePractice, study = studyForEntry(session), card = study?.cards.find(item => item.id === session?.cardId && !item.retiredAt);
-    if (!card || session.answered || session.pending) return;
-    const input = $('#wordPracticeAnswer').value;
-    if (!revealed && !input.trim()) { $('#wordPracticeFeedback').textContent = 'Try the word, or ask for a hint.'; return; }
-    const result = learning.assessAnswer(input, card.english, card.alternatives || []);
-    if (!revealed && !result.correct) { $('#wordPracticeFeedback').textContent = result.near ? 'Almost. Check the spelling, then try again.' : 'Try again, use a hint, or reveal the word.'; return; }
-    session.pending = true; const previous = { ...card };
-    const schedule = learning.reviewSchedule(card, 'hard', { correct: !revealed, assisted: true, retry: true, mode: 'write' });
-    Object.assign(card, schedule); delete card.days; delete card.delay;
-    card.dueAt = Date.now() + schedule.delay;
-    if (!await saveLibrary()) { Object.keys(card).forEach(key => { if (!(key in previous)) delete card[key]; }); Object.assign(card, previous); session.pending = false; return; }
-    session.answered = true; session.pending = false;
-    if (state.inlinePractice !== session || !els.wordSheet.open) return;
-    $('#wordPracticeFeedback').textContent = `${card.english} · ${card.spanish}. ${revealed ? 'Say it once; you will revisit it soon.' : 'You got it. You will revisit it in a later session.'}`;
-    $('#wordPracticeAnswer').disabled = true; $('#wordPracticeForm').querySelector('[type="submit"]').disabled = true;
-    $('#wordPracticeHint').disabled = true; $('#wordPracticeReveal').disabled = true; $('#wordPracticeAnswer').blur(); render();
-  }
-
   function mergeIncomingStudy(incoming) {
     incoming.cards = Array.isArray(incoming?.cards) ? incoming.cards : [];
     incoming.transcript = normalizeTranscript(incoming?.transcript);
@@ -1455,7 +1057,7 @@
     if (new Set(studies.map(study => study.id)).size !== studies.length) throw new Error('Duplicate studies in pack');
     captureStudyVideoPosition(false);
     const previous = JSON.parse(JSON.stringify(state.library));
-    snapshotSession(); destroyStudyVideo(); stopSpeech();
+    destroyStudyVideo(); stopSpeech();
     for (const rawIncoming of studies) {
       const incoming = mergeIncomingStudy(rawIncoming);
       const index = state.library.studies.findIndex(study => study.id === incoming.id);
@@ -1463,12 +1065,12 @@
     }
     state.transcriptStudyId = ''; state.transcriptWordsOnly = false;
     state.library.activeStudyId = studies[0].id;
-    normalizeLibrary(); loadPracticeSession(); snapshotSession();
+    normalizeLibrary();
     if (!await saveLibrary()) {
-      state.library = previous; loadPracticeSession(); render();
+      state.library = previous; render();
       throw new Error('This study could not be saved. Keep the transfer and try again.');
     }
-    render(); showView('today');
+    render(); showView('video');
     showToast(studies.length === 1 ? `${studies[0].name} received` : `${studies.length} studies received`);
   }
 
@@ -1541,11 +1143,7 @@
     const restoreWord = event.target.closest('[data-restore-word]'); if (restoreWord) { restoreRetiredWord(restoreWord.dataset.restoreStudy, restoreWord.dataset.restoreWord); return; }
     const deleteButton = event.target.closest('[data-study-delete]'); if (deleteButton) { requestStudyDelete(deleteButton.dataset.studyDelete); return; }
     const viewButton = event.target.closest('[data-view-target]'); if (viewButton) showView(viewButton.dataset.viewTarget);
-    const practiceButton = event.target.closest('[data-practice-mode]'); if (practiceButton) { state.reviewMode = practiceButton.dataset.practiceMode; savePreference('lingualoop.mobile.reviewMode', state.reviewMode); render(); }
-    const scopeButton = event.target.closest('[data-review-scope]'); if (scopeButton) { state.reviewScope = scopeButton.dataset.reviewScope; savePreference('lingualoop.mobile.reviewScope', state.reviewScope); render(); }
-    const sizeButton = event.target.closest('[data-review-size]'); if (sizeButton) { state.reviewSize = Number(sizeButton.dataset.reviewSize); savePreference('lingualoop.mobile.reviewSize', state.reviewSize); render(); }
-    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); stopTranscriptSpeech(); captureStudyVideoPosition(true); destroyStudyVideo(); snapshotSession(); state.transcriptWordsOnly = false; state.library.activeStudyId = studyButton.dataset.studyOpen; state.transcriptStudyId = ''; saveLibrary(); render(); if (state.view === 'video') { renderStudyVideo(); requestAnimationFrame(restoreTranscriptViewport); } showToast(`${activeStudy()?.name || 'Study'} is now active`); }
-    const rating = event.target.closest('[data-rating]'); if (rating) rateCard(rating.dataset.rating);
+    const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); stopTranscriptSpeech(); captureStudyVideoPosition(true); destroyStudyVideo(); state.transcriptWordsOnly = false; state.library.activeStudyId = studyButton.dataset.studyOpen; state.transcriptStudyId = ''; saveLibrary(); render(); if (state.view === 'video') { renderStudyVideo(); requestAnimationFrame(restoreTranscriptViewport); } showToast(`${activeStudy()?.name || 'Study'} is now active`); }
   });
   els.toggleVideo.addEventListener('click', () => {
     captureStudyVideoPosition(true); pauseStudyVideo();
@@ -1553,27 +1151,20 @@
     savePreference('lingualoop.mobile.videoExpanded', String(state.videoExpanded));
     renderStudyVideo();
   });
-  $('#practiceBackButton').addEventListener('click', returnFromPractice);
-  els.practiceDone.addEventListener('click', returnFromPractice);
-  els.cardContext.addEventListener('click', findCardInTranscript);
   $('#wordSheetClose').addEventListener('click', () => els.wordSheet.close());
-  els.wordSheet.addEventListener('click', event => { if (event.target === els.wordSheet && event.clientY < els.wordSheet.getBoundingClientRect().top) els.wordSheet.close(); });
+  let wordBackdropPress = false;
+  const outsideWordCard = event => {
+    const box = els.wordSheet.getBoundingClientRect();
+    return event.target === els.wordSheet && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom);
+  };
+  els.wordSheet.addEventListener('pointerdown', event => { wordBackdropPress = outsideWordCard(event); });
+  els.wordSheet.addEventListener('click', event => { if (wordBackdropPress && outsideWordCard(event)) els.wordSheet.close(); wordBackdropPress = false; });
   els.wordSheet.addEventListener('close', stopSpeech);
   els.wordSheetSpeak.addEventListener('click', () => speakText(els.wordSheetTitle.textContent, 'en-US', els.wordSheetSpeak));
-  els.wordSheetPractice.addEventListener('click', startInlinePractice);
   els.transcriptWords.addEventListener('click', () => {
     stopTranscriptSpeech(); state.transcriptWordsOnly = !state.transcriptWordsOnly;
     renderStudyTranscript();
   });
-  els.activeStudySummary.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showView(els.activeStudySummary.dataset.viewTarget); } });
-  els.startReview.addEventListener('click', () => { startPractice(state.reviewMode); showView('practice'); });
-  $('#resumePracticeButton').addEventListener('click', () => { if (currentCard()) showView('practice'); });
-  $('#continueReadingButton').addEventListener('click', () => showView('video'));
-  $('#practiceContinueButton').addEventListener('click', () => { startPractice(state.sessionMode); showView('practice'); });
-  $('#practiceHintButton').addEventListener('click', showPracticeHint);
-  $('#practiceNextButton').addEventListener('click', () => rateCard('good'));
-  $('#practiceRetryButton').addEventListener('click', () => { els.writeAnswer.focus({ preventScroll: true }); els.writeAnswer.select(); });
-  $('#practiceRetireButton').addEventListener('click', () => requestRetireWord(studyForEntry(), currentCard()));
   $('#wordRetireButton').addEventListener('click', () => requestRetireWord(activeStudy(), activeStudy()?.cards.find(card => card.id === state.wordSheetCardId)));
   $('#confirmRetireWordButton').addEventListener('click', confirmRetireWord);
   $('#cancelRetireWordButton').addEventListener('click', () => $('#retireWordDialog').close());
@@ -1586,25 +1177,6 @@
   }
   $('#retiredWordsToggle').addEventListener('click', () => selectLibraryCollection(true));
   $('#libraryStudiesButton').addEventListener('click', () => selectLibraryCollection(false));
-  $('#wordPracticeForm').addEventListener('submit', event => { event.preventDefault(); finishInlinePractice(false); });
-  $('#wordPracticeReveal').addEventListener('click', () => finishInlinePractice(true));
-  $('#wordPracticeHint').addEventListener('click', () => { const card = cardForEntry(state.inlinePractice); if (card) $('#wordPracticeFeedback').textContent = `Meaning: ${card.spanish} · starts with ${[...card.english][0]}…`; });
-  $('#wordPracticeDone').addEventListener('click', () => { els.wordSheet.close(); $('#wordPracticeAnswer').blur(); });
-  let draftTimer;
-  els.writeAnswer.addEventListener('input', () => { snapshotSession(); clearTimeout(draftTimer); draftTimer = setTimeout(persistSession, 300); });
-  els.reveal.addEventListener('click', flipPracticeCard);
-  // Native buttons support keyboard use; dragging/scrolling text must not flip.
-  for (const button of [$('#cardFrontFlip'), $('#cardBackFlip')]) {
-    let gesture = null;
-    button.addEventListener('pointerdown', event => { gesture = { x: event.clientX, y: event.clientY, moved: false }; });
-    button.addEventListener('pointermove', event => { if (gesture && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 8) gesture.moved = true; });
-    button.addEventListener('pointercancel', () => { if (gesture) gesture.moved = true; });
-    button.addEventListener('click', event => { const moved = gesture?.moved; gesture = null; if ((event.detail && moved) || window.getSelection()?.toString()) return; flipPracticeCard(); });
-  }
-  els.speak.addEventListener('click', speakCurrent);
-  els.answerSpeak.addEventListener('click', speakCurrentAnswer);
-  els.clipButton.addEventListener('click', toggleCardClip);
-  els.closeClip.addEventListener('click', closeCardClip);
   els.restartStudyVideo.addEventListener('click', () => loadStudyVideo(true));
   els.transcriptRead.addEventListener('click', toggleTranscriptReading);
   els.transcriptStop.addEventListener('click', stopTranscriptSpeech);
@@ -1661,11 +1233,10 @@
     savePreference('lingualoop.mobile.transcriptSpeed', String(state.transcriptSpeed));
     if (state.transcriptSpeechActive) { stopTranscriptSpeech(); showToast('Voice speed updated · tap Read all to continue'); }
   });
-  els.writeForm.addEventListener('submit', checkWrittenAnswer);
   els.pasteTransfer.addEventListener('click', pasteTransferFromClipboard);
   els.importManualTransfer.addEventListener('click', importManualTransfer);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { snapshotSession(); captureStudyVideoPosition(true); saveLibrary(); } });
-  addEventListener('pagehide', () => { snapshotSession(); captureStudyVideoPosition(true); saveLibrary(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { captureStudyVideoPosition(true); saveLibrary(); } });
+  addEventListener('pagehide', () => { captureStudyVideoPosition(true); saveLibrary(); });
   function updateAppViewport() {
     const viewport = window.visualViewport;
     if (viewport && Math.abs(viewport.scale - 1) > .05) return;
@@ -1678,7 +1249,7 @@
   addEventListener('resize', updateAppViewport);
   updateAppViewport();
   (async () => {
-    await loadLibrary(); await importPackFromHash(); loadPracticeSession(); render(); showView('today');
+    await loadLibrary(); await importPackFromHash(); render(); showView(activeStudy() ? 'video' : 'studies');
     if ('serviceWorker' in navigator) {
       const registerOfflineShell = () => navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(registration => registration.update()).catch(() => {});
       // IndexedDB/import may finish after load; do not miss offline installation.
