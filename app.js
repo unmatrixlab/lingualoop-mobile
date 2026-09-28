@@ -15,7 +15,8 @@
     view: 'today', practiceMode: 'cards', queue: [], index: 0, revealed: false,
     practiceRun: 0, practiceReturn: 'today', practiceRetries: {}, practiceAnswers: 0, practiceCorrect: 0,
     sessionMode: 'adaptive', practiceInitialCount: 0, practiceResults: {}, evidence: null,
-    reviewScope: readPreference('lingualoop.mobile.reviewScope') || 'all',
+    reviewScope: readPreference('lingualoop.mobile.reviewScope') === 'all' ? 'all' : 'current',
+    reviewMode: ['adaptive','cards','write','listen'].includes(readPreference('lingualoop.mobile.reviewMode')) ? readPreference('lingualoop.mobile.reviewMode') : 'adaptive',
     reviewSize: [5, 8, 10].includes(Number(readPreference('lingualoop.mobile.reviewSize'))) ? Number(readPreference('lingualoop.mobile.reviewSize')) : 5,
     retireTarget: null, retireUndo: null, inlinePractice: null,
     videoExpanded: readPreference('lingualoop.mobile.videoExpanded') !== 'false',
@@ -197,6 +198,8 @@
     stopSpeech();
     state.view = view;
     document.body.dataset.view = view;
+    updateAppViewport();
+    if (view === 'today' || view === 'studies') render();
     if (view === 'practice') restorePracticePresentation();
     $$('.view').forEach(section => section.classList.toggle('active', section.dataset.view === view));
     $$('.bottom-nav [data-view-target]').forEach(button => button.classList.toggle('active', button.dataset.viewTarget === view));
@@ -224,10 +227,11 @@
     const study = activeStudy(), cards = scopedStudies().flatMap(item => availableCards(item));
     const due = scopedStudies().flatMap(item => dueCards(item));
     const resume = currentCard();
-    els.todayDate.textContent = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date()).toUpperCase();
+    els.todayDate.textContent = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date());
+    els.todayDate.dateTime = new Date().toLocaleDateString('en-CA');
     els.dueCount.textContent = due.length;
     $('#dueUnit').textContent = due.length === 1 ? 'word' : 'words';
-    els.todayMessage.textContent = due.length ? 'A few words, a little context. Pick up where you left off.' : cards.length ? 'You are caught up. Read a little, or choose some extra practice.' : study ? 'Your words are complete. Keep reading, or restore a learned word in Studies.' : 'Connect a study from your computer to begin.';
+    els.todayMessage.textContent = !study ? 'Add a study to begin.' : !cards.length ? 'All learned. Read on, or restore words in Studies.' : !due.length ? 'Caught up · extra practice is available.' : state.reviewScope === 'all' ? `Across ${state.library.studies.length} ${state.library.studies.length === 1 ? 'study' : 'studies'}` : 'From this study';
     const independent = cards.reduce((sum, card) => sum + (Number(card.independentRecalls) || 0), 0);
     const attempts = cards.reduce((sum, card) => sum + (Number(card.recallAttempts) || 0), 0);
     els.retentionValue.textContent = attempts ? `${independent} / ${attempts}` : '—';
@@ -236,13 +240,18 @@
     els.statLearning.textContent = cards.filter(card => card.stage !== 'strong').length;
     els.statStrong.textContent = cards.filter(card => card.stage === 'strong').length;
     els.cardsCount.textContent = cards.length; els.writeCount.textContent = cards.length;
-    els.startReview.disabled = !resume && !cards.length;
+    els.startReview.disabled = !cards.length;
+    $('#resumePracticeButton').hidden = !resume;
+    if (resume) $('#resumePracticeButton span').textContent = `Resume · ${Math.min(state.index + 1, state.practiceInitialCount)} / ${state.practiceInitialCount} words`;
     const batchSize = nextBatch(!due.length).length;
-    els.startReview.querySelector('span').textContent = resume ? 'Continue practice' : due.length ? `Start · ${batchSize} words` : 'Extra practice';
-    $('#sessionStatus').textContent = resume ? `${Math.min(state.index, state.practiceInitialCount)} of ${state.practiceInitialCount} words · session saved` : attempts ? `${independent} recalled without help in ${attempts} first attempts` : 'Short sessions · saved on this phone';
-    $('#reviewScope').value = state.reviewScope; $('#reviewSize').value = String(state.reviewSize);
+    els.startReview.querySelector('span').textContent = `${resume ? 'Start new' : due.length ? 'Start' : 'Practice'} · ${batchSize} ${batchSize === 1 ? 'word' : 'words'}`;
+    $('#sessionStatus').textContent = attempts ? `${independent} / ${attempts} recalled without help` : '';
+    $$('[data-review-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.reviewScope === state.reviewScope)));
+    $$('[data-review-size]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.reviewSize) === state.reviewSize)));
+    $$('[data-practice-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.practiceMode === state.reviewMode)));
+    $('#practiceModeHint').textContent = { adaptive: 'Recall, write and listen in one session.', cards: 'Recall the meaning, then reveal it.', write: 'Complete a sentence or write the English.', listen: 'Hear the word, then write it in English.' }[state.reviewMode];
     $('#continueReadingButton').disabled = !study || !(study.transcript?.length || study.media);
-    $('#continueReadingLabel').textContent = study ? `${study.name} · ${formatClipTime(study.mobilePlayback?.time || 0)}` : 'Choose a study first';
+    $('#continueReadingLabel').textContent = study ? `This study · ${formatClipTime(study.mobilePlayback?.time || 0)}` : 'Add a study first';
     els.activeStudyTitle.textContent = study?.name || 'No study yet';
     els.activeStudySummary.innerHTML = study ? `<div class="study-swatch" style="background:${escapeHtml(study.color || '#76a8ff')}"></div><div><strong>${escapeHtml(study.name)}</strong><small>${availableCards(study).length} words · ${(study.transcript || []).length} subtitles</small></div><span>Change →</span>` : '<div class="study-swatch"></div><div><strong>Connect LinguaLoop 3</strong><small>Load your first study from the computer.</small></div><span>Connect →</span>';
     els.activeStudySummary.dataset.viewTarget = study ? 'studies' : 'connect';
@@ -372,7 +381,7 @@
       const results = Object.values(state.practiceResults).filter(result => !result.removed), recalled = results.filter(result => result.independent).length;
       els.practiceEmpty.querySelector('h2').textContent = results.length ? 'A good place to pause' : 'No words to review';
       els.practiceSummary.textContent = results.length ? `${recalled} recalled without help · ${results.length - recalled} to revisit. Your progress is saved.` : 'Read a little, or restore a learned word in Studies.';
-      els.practiceDone.textContent = state.practiceReturn === 'video' ? 'Continue reading' : 'Back to Today';
+      els.practiceDone.textContent = state.practiceReturn === 'video' ? 'Continue reading' : 'Back to practice';
       $('#practiceContinueButton').disabled = !scopedStudies().some(study => availableCards(study).length);
       $('#practiceContinueButton').textContent = nextBatch().length ? `Continue · ${nextBatch().length} words` : 'Optional extra practice';
       return;
@@ -397,6 +406,7 @@
     els.cardContext.hidden = !(learning.indexFor(studyForEntry(entry)).byCard.get(card.id)?.length);
     els.writeForm.hidden = !writing; if (!restore) els.writeAnswer.value = '';
     els.clipButton.hidden = true;
+    $('.card-content').scrollTop = 0;
     restorePracticePresentation();
   }
   function restorePracticePresentation() {
@@ -411,6 +421,7 @@
     $('#practiceRetryButton').hidden = !writing || evidence.revealed || !evidence.wrongAttempts;
     $('#practiceHintButton').disabled = evidence.revealed;
     $('#practiceHintText').textContent = evidence.hint || ''; $('#practiceHintText').hidden = !evidence.hint;
+    els.writeForm.hidden = !writing || evidence.revealed;
     els.writeAnswer.disabled = evidence.revealed;
     els.writeForm.querySelector('button').disabled = evidence.revealed;
     els.writeFeedback.textContent = evidence.feedback || ''; els.writeFeedback.className = evidence.feedbackClass || '';
@@ -1510,7 +1521,9 @@
     const restoreWord = event.target.closest('[data-restore-word]'); if (restoreWord) { restoreRetiredWord(restoreWord.dataset.restoreStudy, restoreWord.dataset.restoreWord); return; }
     const deleteButton = event.target.closest('[data-study-delete]'); if (deleteButton) { requestStudyDelete(deleteButton.dataset.studyDelete); return; }
     const viewButton = event.target.closest('[data-view-target]'); if (viewButton) showView(viewButton.dataset.viewTarget);
-    const practiceButton = event.target.closest('[data-practice-mode]'); if (practiceButton) { startPractice(practiceButton.dataset.practiceMode); showView('practice'); }
+    const practiceButton = event.target.closest('[data-practice-mode]'); if (practiceButton) { state.reviewMode = practiceButton.dataset.practiceMode; savePreference('lingualoop.mobile.reviewMode', state.reviewMode); render(); }
+    const scopeButton = event.target.closest('[data-review-scope]'); if (scopeButton) { state.reviewScope = scopeButton.dataset.reviewScope; savePreference('lingualoop.mobile.reviewScope', state.reviewScope); render(); }
+    const sizeButton = event.target.closest('[data-review-size]'); if (sizeButton) { state.reviewSize = Number(sizeButton.dataset.reviewSize); savePreference('lingualoop.mobile.reviewSize', state.reviewSize); render(); }
     const studyButton = event.target.closest('[data-study-open]'); if (studyButton) { clearPendingStudyDelete(); stopTranscriptSpeech(); captureStudyVideoPosition(true); destroyStudyVideo(); snapshotSession(); state.transcriptWordsOnly = false; state.library.activeStudyId = studyButton.dataset.studyOpen; state.transcriptStudyId = ''; saveLibrary(); render(); if (state.view === 'video') { renderStudyVideo(); requestAnimationFrame(restoreTranscriptViewport); } showToast(`${activeStudy()?.name || 'Study'} is now active`); }
     const rating = event.target.closest('[data-rating]'); if (rating) rateCard(rating.dataset.rating);
   });
@@ -1533,9 +1546,8 @@
     renderStudyTranscript();
   });
   els.activeStudySummary.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showView(els.activeStudySummary.dataset.viewTarget); } });
-  els.startReview.addEventListener('click', () => { if (!currentCard()) startPractice('adaptive'); showView('practice'); });
-  $('#reviewScope').addEventListener('change', event => { state.reviewScope = event.target.value; savePreference('lingualoop.mobile.reviewScope', state.reviewScope); render(); });
-  $('#reviewSize').addEventListener('change', event => { state.reviewSize = Number(event.target.value); savePreference('lingualoop.mobile.reviewSize', state.reviewSize); render(); });
+  els.startReview.addEventListener('click', () => { startPractice(state.reviewMode); showView('practice'); });
+  $('#resumePracticeButton').addEventListener('click', () => { if (currentCard()) showView('practice'); });
   $('#continueReadingButton').addEventListener('click', () => showView('video'));
   $('#practiceContinueButton').addEventListener('click', () => { startPractice(state.sessionMode); showView('practice'); });
   $('#practiceHintButton').addEventListener('click', showPracticeHint);
@@ -1630,6 +1642,16 @@
   els.importManualTransfer.addEventListener('click', importManualTransfer);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { snapshotSession(); captureStudyVideoPosition(true); saveLibrary(); } });
   addEventListener('pagehide', () => { snapshotSession(); captureStudyVideoPosition(true); saveLibrary(); });
+  function updateAppViewport() {
+    const viewport = window.visualViewport;
+    if (viewport && Math.abs(viewport.scale - 1) > .05) return;
+    const height = Math.round(viewport?.height || innerHeight);
+    document.documentElement.style.setProperty('--app-height', `${height}px`);
+    document.body.classList.toggle('keyboard-open', Boolean(viewport && innerHeight - height > 120));
+  }
+  window.visualViewport?.addEventListener('resize', updateAppViewport);
+  addEventListener('resize', updateAppViewport);
+  updateAppViewport();
   (async () => {
     await loadLibrary(); await importPackFromHash(); loadPracticeSession(); render(); showView('today');
     if ('serviceWorker' in navigator) {

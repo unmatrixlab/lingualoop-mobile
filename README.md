@@ -16,6 +16,7 @@ GitHub Pages hosts only the application shell. Imported study packs and review p
 - Automatic session and written-draft recovery after reopening
 - Learned words can be removed from phone practice with confirmation, Undo and permanent access to Restore in Studies
 - Removals and phone progress survive updated desktop imports
+- A compact app layout with inline session controls, stable practice actions and card-level audio
 - English and Spanish card pronunciation
 - Complete bilingual transcripts with individual and continuous device-voice reading
 - Full-video comprehension with active-subtitle following, direct seeking and individual subtitle clips; desktop chains do not affect phone playback
@@ -76,7 +77,7 @@ The decoded study pack uses this structure:
 
 ## Learning and recovery
 
-Today offers a small mixed session and Continue reading. Practice options retains Cards, Write and Listen. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
+Practice home keeps source, session size and Mixed / Cards / Write / Listen visible together. Select the controls, then Start; an unfinished session has a separate Resume action. Continue reading returns to the active study. A first independent recall schedules a review after one day; subsequent independent successful days can grow the interval to 3, 7, 14 and 30 days. Strong requires at least three successful days. Hints, errors, revealed answers and immediate retries do not create evidence of independent mastery. Statistics show first-attempt recall since this update, without reinterpreting old self-ratings as measured retention.
 
 The phone stores its unfinished session, typed draft, evidence and progress in the existing local library. Importing the same study preserves these fields by stable study and word IDs. Removing a word as learned archives it locally rather than deleting desktop vocabulary; it disappears from phone practice and transcript vocabulary highlighting. Use Studies → Learned words → Restore to bring it back. Reimports preserve removal records even when a removed word is temporarily absent from the incoming pack.
 

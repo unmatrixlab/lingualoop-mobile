@@ -9,7 +9,7 @@
   <title>LinguaLoop Mobile</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body data-view="today">
   <div class="app-shell">
@@ -21,70 +21,58 @@
         <span>LINGUALOOP</span>
         <strong>Mobile</strong>
       </div>
-      <button class="connection-pill" id="connectionPill" type="button" data-view-target="connect" aria-label="Open connection status">
-        <i aria-hidden="true"></i><span>Local</span>
-      </button>
+      <time class="header-date" id="todayDate" aria-label="Today"></time>
     </header>
 
     <main>
-      <section class="view active" data-view="today" aria-labelledby="todayTitle">
-        <div class="eyebrow-row"><span class="eyebrow">A LITTLE, EVERY DAY</span><span id="todayDate"></span></div>
-        <h1 id="todayTitle" class="today-title">Today</h1>
-        <section class="hero-card" aria-labelledby="activeStudyTitle">
-          <div class="active-study-heading"><span class="eyebrow">ACTIVE STUDY</span><button class="text-button" type="button" data-view-target="studies">Change study</button></div>
-          <h2 id="activeStudyTitle">No study yet</h2>
-          <article class="study-summary" id="activeStudySummary">
-            <div class="study-swatch"></div>
-            <div><strong>Connect LinguaLoop 3</strong><small>Your selected vocabulary will appear here.</small></div>
-            <span>Connect →</span>
-          </article>
+      <section class="view active home-view" data-view="today" aria-label="Practice home">
+        <section class="active-study" aria-labelledby="activeStudyTitle">
+          <div class="active-study-heading"><span class="eyebrow">YOUR STUDY</span><button class="text-button" type="button" data-view-target="studies">Change</button></div>
+          <h1 id="activeStudyTitle">No study yet</h1>
+          <article class="study-summary" id="activeStudySummary"></article>
+        </section>
+        <section class="session-setup" aria-label="Practice session">
           <div class="session-intro">
             <p class="ready-count"><span id="dueCount">0</span> <span id="dueUnit">words</span> ready</p>
-            <p id="todayMessage">A short session keeps every word within reach.</p>
+            <p id="todayMessage"></p>
           </div>
-          <div class="session-preferences">
-            <label for="reviewScope"><span>Practice from</span><select id="reviewScope"><option value="all">All studies</option><option value="current">Current study</option></select></label>
-            <label for="reviewSize"><span>Session size</span><select id="reviewSize"><option value="5">5 words</option><option value="8">8 words</option><option value="10">10 words</option></select></label>
+          <div class="setup-row">
+            <span class="setup-label" id="reviewScopeLabel">From</span>
+            <div class="segmented-control" id="reviewScope" role="group" aria-labelledby="reviewScopeLabel">
+              <button type="button" data-review-scope="current" aria-pressed="true">This study</button>
+              <button type="button" data-review-scope="all" aria-pressed="false">All studies</button>
+            </div>
           </div>
-          <button class="primary-action" id="startReviewButton" type="button">
-            <span>Start 5 words</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
-          </button>
-          <p class="session-status" id="sessionStatus" role="status">A few words. One focused session.</p>
+          <div class="setup-row">
+            <span class="setup-label" id="reviewSizeLabel">Words</span>
+            <div class="segmented-control session-size" id="reviewSize" role="group" aria-labelledby="reviewSizeLabel">
+              <button type="button" data-review-size="5" aria-pressed="true">5</button>
+              <button type="button" data-review-size="8" aria-pressed="false">8</button>
+              <button type="button" data-review-size="10" aria-pressed="false">10</button>
+            </div>
+          </div>
+          <div class="mode-picker">
+            <span class="setup-label" id="reviewModeLabel">Practice</span>
+            <div class="segmented-control practice-modes" role="group" aria-labelledby="reviewModeLabel">
+              <button type="button" data-practice-mode="adaptive" aria-pressed="true">Mixed</button>
+              <button type="button" data-practice-mode="cards" aria-pressed="false">Cards</button>
+              <button type="button" data-practice-mode="write" aria-pressed="false">Write</button>
+              <button type="button" data-practice-mode="listen" aria-pressed="false">Listen</button>
+            </div>
+            <p id="practiceModeHint">Recall, write and listen in one session.</p>
+          </div>
+          <div class="session-launch">
+            <button class="resume-practice text-button" id="resumePracticeButton" type="button" hidden><span>Resume practice</span><span aria-hidden="true">→</span></button>
+            <button class="primary-action" id="startReviewButton" type="button"><span>Start · 5 words</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+            <p class="session-status" id="sessionStatus" role="status"></p>
+          </div>
         </section>
         <button class="continue-reading" id="continueReadingButton" type="button">
           <span class="reading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2 2-2h6v14h-6l-2 2-2-2H4zM12 7v14"/></svg></span>
           <span><strong>Continue reading</strong><small id="continueReadingLabel">Return to your study</small></span>
           <span class="reading-arrow" aria-hidden="true">→</span>
         </button>
-
-        <div class="stat-grid" aria-label="Vocabulary summary" hidden>
-          <article><span class="stat-icon due">↻</span><strong id="statDue">0</strong><small>Due now</small></article>
-          <article><span class="stat-icon learning">◇</span><strong id="statLearning">0</strong><small>Learning</small></article>
-          <article><span class="stat-icon strong">✓</span><strong id="statStrong">0</strong><small>Strong</small></article>
-        </div>
-
-        <div class="progress-orbit" id="progressOrbit" style="--progress:0%" hidden><div><strong id="retentionValue">0%</strong><span>recall accuracy</span></div></div>
-        <details class="practice-options">
-          <summary><span>Practice options</span><span class="options-chevron" aria-hidden="true">⌄</span></summary>
-          <p>Choose a single skill for this session.</p>
-          <div class="mode-grid">
-          <button class="mode-card" type="button" data-practice-mode="cards">
-            <span class="mode-icon cards-icon">▱</span>
-            <span><strong>Cards</strong><small>Recall, reveal and rate</small></span>
-            <em id="cardsCount">0</em>
-          </button>
-          <button class="mode-card" type="button" data-practice-mode="write">
-            <span class="mode-icon write-icon">Aa</span>
-            <span><strong>Write</strong><small>Find the English phrase</small></span>
-            <em id="writeCount">0</em>
-          </button>
-          <button class="mode-card" type="button" data-practice-mode="listen">
-            <span class="mode-icon listen-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></span>
-            <span><strong>Listen</strong><small>Hear it, then write it</small></span>
-          </button>
-          </div>
-        </details>
+        <div hidden aria-hidden="true"><span id="statDue"></span><span id="statLearning"></span><span id="statStrong"></span><span id="cardsCount"></span><span id="writeCount"></span><span id="retentionValue"></span><div id="progressOrbit"></div></div>
       </section>
 
       <section class="view" data-view="practice" aria-labelledby="practiceTitle">
@@ -98,46 +86,38 @@
 
         <section class="practice-empty" id="practiceEmpty" hidden>
           <span>✓</span><h2>Session complete</h2><p id="practiceSummary">Your progress is saved.</p>
-          <button class="primary-action full-width" id="practiceDoneButton" type="button">Back to Today</button>
+          <button class="primary-action full-width" id="practiceDoneButton" type="button">Back to practice</button>
           <button class="secondary-action full-width" id="practiceContinueButton" type="button">Practice 5 more words</button>
         </section>
 
         <section class="practice-stage" id="practiceStage">
-          <div class="prompt-meta">
-            <span id="promptDirection">ENGLISH → SPANISH</span>
-            <div class="prompt-tools">
-              <button class="practice-tool-button listen" id="speakButton" type="button" aria-label="Pronounce the English side">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>English</span>
-              </button>
-              <button class="practice-tool-button clip" id="clipButton" type="button" aria-label="Play the original video fragment" hidden>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg><span>Clip</span>
-              </button>
-            </div>
-          </div>
           <section class="clip-panel" id="clipPanel" aria-label="Original YouTube fragment" hidden>
             <header><div><span>ORIGINAL CLIP</span><strong id="clipTitle">From this study</strong></div><button id="closeClipButton" type="button" aria-label="Close the original video fragment">×</button></header>
             <div class="clip-frame"><iframe id="clipFrame" title="Original YouTube fragment" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>
           </section>
           <article class="recall-card" id="recallCard">
-            <span class="card-label">REMEMBER THIS</span>
-            <h2 id="promptText">Ready?</h2>
-            <p id="promptContext"></p><button class="text-button context-link" id="cardContextButton" type="button" hidden>Find in transcript ↗</button>
+            <div class="card-content">
+              <span class="card-label" id="promptDirection">ENGLISH → SPANISH</span>
+              <h2 id="promptText">Ready?</h2>
+              <p id="promptContext"></p><p class="practice-hint-text" id="practiceHintText" role="status" hidden></p>
             <div class="answer-area" id="answerArea" hidden>
               <div class="answer-heading"><span>ANSWER</span><button class="practice-tool-button listen" id="answerSpeakButton" type="button" aria-label="Pronounce the Spanish answer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>Spanish</span></button></div>
               <strong id="answerText"></strong><p id="answerContext"></p>
             </div>
+            </div>
+            <div class="card-toolbar">
+              <button class="practice-tool-button listen" id="speakButton" type="button" aria-label="Pronounce the English word"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10v4h4l5 4V6l-5 4zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg><span>English</span></button>
+              <button class="text-button context-link" id="cardContextButton" type="button" hidden>In transcript ↗</button>
+              <button id="clipButton" type="button" hidden aria-label="Play the original video fragment">Clip</button>
+            </div>
           </article>
 
+          <div class="practice-actions">
           <form class="write-form" id="writeForm" hidden>
             <label for="writeAnswer">Your English</label>
             <div><input id="writeAnswer" enterkeyhint="done" autocomplete="off" autocapitalize="none" spellcheck="false"><button type="submit">Check</button></div>
-            <p id="writeFeedback" role="status"></p>
           </form>
-
-          <div class="practice-hint-row" id="practiceHintRow">
-            <button class="text-button" id="practiceHintButton" type="button" aria-controls="practiceHintText">Give me a hint</button>
-            <p id="practiceHintText" role="status" hidden></p>
-          </div>
+          <p id="writeFeedback" role="status"></p>
 
           <button class="primary-action reveal-button" id="revealButton" type="button">Reveal answer</button>
           <button class="primary-action full-width" id="practiceNextButton" type="button" hidden>Next word →</button>
@@ -148,7 +128,11 @@
             <button type="button" data-rating="good"><span>Good</span><small>3 days</small></button>
             <button type="button" data-rating="easy"><span>Easy</span><small>7 days</small></button>
           </div>
-          <button class="quiet-action practice-retire" id="practiceRetireButton" type="button">Learned · remove</button>
+          <div class="practice-secondary-actions">
+            <button class="text-button" id="practiceHintButton" type="button" aria-controls="practiceHintText">Hint</button>
+            <button class="quiet-action practice-retire" id="practiceRetireButton" type="button">Learned · remove</button>
+          </div>
+          </div>
         </section>
       </section>
 
@@ -206,11 +190,9 @@
       </section>
 
       <section class="view" data-view="studies" aria-labelledby="studiesTitle">
-        <div class="eyebrow-row"><span class="eyebrow">YOUR LIBRARY</span><span id="studyCount">0 studies</span></div>
-        <h1 id="studiesTitle">Studies</h1>
-        <p class="page-intro">Tap a study to make it active. Removing it here never changes the original project on your computer.</p>
+        <header class="library-heading"><div><h1 id="studiesTitle">Studies</h1><span id="studyCount">0 studies</span></div><button class="text-button" type="button" data-view-target="connect">+ Add study</button></header>
         <div class="study-list" id="studyList"></div>
-        <button class="secondary-action full-width" type="button" data-view-target="connect">Connect another study</button>
+
         <section class="retired-words" aria-label="Words removed from practice">
           <button class="retired-words-toggle" id="retiredWordsToggle" type="button" aria-expanded="false" aria-controls="retiredWordsPanel"><span>Learned words</span><span aria-hidden="true">⌄</span></button>
           <div id="retiredWordsPanel" hidden><p>These words are out of practice on this phone. Restore one whenever you want to revisit it.</p><div id="retiredWordsList" class="retired-words-list"></div></div>
@@ -218,22 +200,20 @@
       </section>
 
       <section class="view" data-view="connect" aria-labelledby="connectTitle">
-        <div class="eyebrow-row"><span class="eyebrow">PRIVATE TRANSFER</span><span>NO CLOUD DATA</span></div>
-        <h1 id="connectTitle">Connect LinguaLoop</h1>
-        <p class="page-intro">Move a private study pack with vocabulary, subtitles and video timing into this installed app. Your study content is never stored on this website.</p>
-        <div class="connect-visual" aria-hidden="true">
-          <div class="device desktop"><span></span><span></span><span></span></div>
-          <div class="transfer-line"><i></i><b>•••</b></div>
-          <div class="device phone"><span></span><span></span><span></span></div>
-        </div>
+        <header class="view-header connect-heading"><button class="icon-button" type="button" data-view-target="studies" aria-label="Back to studies">←</button><div><h1 id="connectTitle">Add a study</h1></div></header>
+        <ol class="connect-steps">
+          <li><span>1</span><div><strong>Send from your computer</strong><small>In Studies, choose <b>Send to phone</b>.</small></div></li>
+          <li><span>2</span><div><strong>Scan and copy</strong><small>Scan the QR, then tap <b>Copy study</b>.</small></div></li>
+          <li><span>3</span><div><strong>Return here and paste</strong><small>Your study stays on this phone.</small></div></li>
+        </ol>
         <section class="transfer-import-card" aria-labelledby="transferImportTitle">
           <div class="transfer-import-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M8 7V5a3 3 0 0 1 3-3h2a3 3 0 0 1 3 3v2M6 6h12v16H6zM9 13l3 3 3-3M12 9v7"/></svg>
           </div>
           <div class="transfer-import-copy">
-            <span>STUDY COPIED IN SAFARI?</span>
-            <strong id="transferImportTitle">Bring it into this app</strong>
-            <p>Return here after scanning the computer QR and copying the study.</p>
+            <span>READY TO IMPORT</span>
+            <strong id="transferImportTitle">Paste your study</strong>
+            <p>Vocabulary, subtitles and your video in one transfer.</p>
           </div>
           <button class="primary-action transfer-paste-button" id="pasteTransferButton" type="button">Paste study</button>
           <div class="manual-transfer-panel" id="manualTransferPanel" hidden>
@@ -242,17 +222,11 @@
             <button class="secondary-action" id="importManualTransferButton" type="button">Import pasted study</button>
           </div>
         </section>
-        <ol class="connect-steps">
-          <li><span>1</span><div><strong>Open LinguaLoop 3</strong><small>Choose <b>Send to phone</b> from Studies.</small></div></li>
-          <li><span>2</span><div><strong>Scan and copy</strong><small>Use the iPhone camera, then tap <b>Copy study</b> in Safari.</small></div></li>
-          <li><span>3</span><div><strong>Paste it here</strong><small>Open this Home Screen app and tap <b>Paste study</b>. It stays available offline.</small></div></li>
-        </ol>
-        <div class="connection-status"><i></i><div><strong>Ready to import</strong><small>Safari and this installed app keep separate private storage</small></div></div>
       </section>
     </main>
 
     <nav class="bottom-nav" aria-label="Primary navigation">
-      <button class="active" type="button" data-view-target="today"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z"/></svg><span>Today</span></button>
+      <button class="active" type="button" data-view-target="today"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z"/></svg><span>Practice</span></button>
       <button type="button" data-view-target="video"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2 2-2h6v14h-6l-2 2-2-2H4zM12 7v14"/></svg><span>Read &amp; listen</span></button>
       <button type="button" data-view-target="studies"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v11H4z"/></svg><span>Studies</span></button>
     </nav>
@@ -286,6 +260,6 @@
     <div class="dialog-actions"><button class="primary-action full-width" id="confirmRetireWordButton" type="button">Learned · remove</button><button class="secondary-action full-width" id="cancelRetireWordButton" type="button">Keep practicing</button></div>
   </dialog>
   <script src="learning.js?v=2"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>
